@@ -1,0 +1,1 @@
+Requires openAI SDK and Google GenAI SDK

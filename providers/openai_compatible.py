@@ -1,0 +1,135 @@
+"""
+OpenAI兼容策略
+适配DeepSeek等OpenAI兼容的API
+"""
+import os
+from typing import List, Dict, Any, Optional
+from openai import OpenAI
+
+from . import ProviderStrategy, register_provider
+from message_models import InternalMessage, ChatOptions, create_text_message, ProviderConfig
+
+
+class OpenAICompatibleStrategy(ProviderStrategy):
+    """OpenAI兼容策略"""
+    
+    def __init__(self, config: ProviderConfig):
+        super().__init__(config)
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=config.base_url if config.base_url and config.base_url != "N/A" else None
+        )
+    
+    def supports_feature(self, feature: str) -> bool:
+        """检查是否支持特定功能"""
+        # 从配置中检查
+        if feature in self.config.features:
+            return True
+            
+        supported_features = {
+            "temperature": True,
+            "json_output": True,
+            "tools": True,
+            "streaming": True,
+        }
+        return supported_features.get(feature, False)
+    
+    def normalize_options(self, options: ChatOptions) -> ChatOptions:
+        """规范化选项"""
+        options = super().normalize_options(options)
+        
+        # OpenAI兼容API通常只有enabled/disabled reasoning
+        reasoning_config = self.config.features.get("reasoning", {})
+        if reasoning_config.get("type") == "boolean":
+            if options.reasoning in ["low", "medium", "high", "minimal", "on", True]:
+                options.reasoning = True
+            elif options.reasoning in ["off", False]:
+                options.reasoning = False
+        
+        return options
+
+    def format_messages(self, messages: List[InternalMessage]) -> List[Dict[str, str]]:
+        """将内部消息格式转换为OpenAI格式"""
+        formatted = []
+        for msg in messages:
+            # 目前只处理文本消息
+            text_content = ""
+            for part in msg.content:
+                if part.type == "text":
+                    text_content += part.content
+                # 其他类型消息暂不处理
+            
+            if text_content:
+                formatted.append({
+                    "role": msg.role,
+                    "content": text_content
+                })
+        return formatted
+    
+    def build_api_payload(
+        self, 
+        formatted_messages: List[Dict[str, str]], 
+        options: ChatOptions
+    ) -> Dict[str, Any]:
+        """构建API请求负载"""
+        payload = {
+            "model": self.model,
+            "messages": formatted_messages,
+            "stream": options.stream,
+        }
+        
+        # 添加可选参数
+        if options.temperature is not None:
+            payload["temperature"] = options.temperature
+        
+        if options.max_tokens is not None:
+            payload["max_tokens"] = options.max_tokens
+            
+        if options.top_p is not None:
+            payload["top_p"] = options.top_p
+        
+        # JSON输出模式
+        if options.json_output:
+            payload["response_format"] = {"type": "json_object"}
+        
+        # 工具调用
+        if options.tools:
+            payload["tools"] = options.tools
+            
+        # 思维链 (DeepSeek specific)
+        if options.reasoning and options.reasoning is True:
+            # DeepSeek R1 开启思维链（如果不是reasoner模型，或者需要显式开启）
+            # 用户提示需要 extra_body={"thinking": {"type": "enabled"}}
+            payload["extra_body"] = {"thinking": {"type": "enabled"}}
+        
+        return payload
+    
+    def call_api(self, payload: Dict[str, Any]) -> Any:
+        """调用OpenAI兼容API"""
+        try:
+            response = self.client.chat.completions.create(**payload)
+            return response
+        except Exception as e:
+            raise Exception(f"OpenAI API调用失败: {str(e)}")
+    
+    def parse_response(self, api_response: Any) -> str:
+        """解析API响应"""
+        if hasattr(api_response, 'choices') and len(api_response.choices) > 0:
+            choice = api_response.choices[0]
+            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                return choice.message.content
+            elif hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
+                # 处理工具调用
+                tool_calls = choice.message.tool_calls
+                if tool_calls:
+                    return f"[工具调用] {len(tool_calls)}个工具调用"
+        elif hasattr(api_response, 'text'):
+            return api_response.text
+        
+        return str(api_response)
+
+
+# 注册提供商
+register_provider("deepseek", OpenAICompatibleStrategy)
+register_provider("openai", OpenAICompatibleStrategy)
+register_provider("Silicon_flow", OpenAICompatibleStrategy)
