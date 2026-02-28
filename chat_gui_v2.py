@@ -217,6 +217,8 @@ class ChatGUIV2:
         self.output_area.tag_config("payload", foreground="#6a9955")
         self.output_area.tag_config("user", foreground="#569cd6", font=("Microsoft YaHei", 10, "bold"))
         self.output_area.tag_config("assistant", foreground="#ce9178")
+        self.output_area.tag_config("reasoning", foreground="#9cdcfe", font=("Microsoft YaHei", 9, "italic"))
+        self.output_area.tag_config("reasoning_header", foreground="#d7ba7d", font=("Microsoft YaHei", 9, "bold"))
     
     def create_input_area(self):
         """创建输入区域"""
@@ -340,12 +342,19 @@ class ChatGUIV2:
         self.root.update_idletasks()
         
         # 发送请求
-        response, payload = self.chat_logic.chat(user_input)
+        final_answer, reasoning_content, payload = self.chat_logic.chat(user_input)
         
-        # 显示payload和响应
+        # 显示payload
         self.log(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", "payload")
         self.log("--------------------\n", "payload")
-        self.log(f"Assistant: {response}\n", "assistant")
+        
+        # 显示思维链内容（如果存在）
+        if reasoning_content:
+            self.log("\n[思维链过程]:\n", "reasoning_header")
+            self.log(f"{reasoning_content}\n", "reasoning")
+        
+        # 显示最终答案
+        self.log(f"Assistant: {final_answer}\n", "assistant")
         self.update_preview()
     
     def clear_context(self):

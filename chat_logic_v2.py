@@ -127,8 +127,8 @@ class ChatLogicV2:
         
         return payload
     
-    def chat(self, user_input: str) -> Tuple[str, Dict[str, Any]]:
-        """发送聊天请求"""
+    def chat(self, user_input: str) -> Tuple[str, Optional[str], Dict[str, Any]]:
+        """发送聊天请求，返回(最终答案, 思维链内容, payload)"""
         # 获取负载（确保与预览一致）
         payload = self.get_full_payload(user_input)
         
@@ -136,19 +136,19 @@ class ChatLogicV2:
             # 调用API
             response = self.current_strategy.call_api(payload)
             
-            # 解析响应
-            assistant_response = self.current_strategy.parse_response(response)
+            # 解析响应（现在返回最终答案和思维链内容）
+            final_answer, reasoning_content = self.current_strategy.parse_response(response)
             
             # 只有在API调用成功后才更新上下文
             self.add_message("user", user_input)
-            self.add_message("assistant", assistant_response)
+            self.add_message("assistant", final_answer)
             
-            return assistant_response, payload
+            return final_answer, reasoning_content, payload
             
         except Exception as e:
             # API调用失败，返回错误信息但仍返回payload用于调试
             error_msg = f"Error: {str(e)}"
-            return error_msg, payload
+            return error_msg, None, payload
     
     def supports_feature(self, feature: str) -> bool:
         """检查当前提供商是否支持特定功能"""

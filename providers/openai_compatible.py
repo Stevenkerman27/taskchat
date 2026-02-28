@@ -3,7 +3,7 @@ OpenAI兼容策略
 适配DeepSeek等OpenAI兼容的API
 """
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 
 from . import ProviderStrategy, register_provider
@@ -112,21 +112,37 @@ class OpenAICompatibleStrategy(ProviderStrategy):
         except Exception as e:
             raise Exception(f"OpenAI API调用失败: {str(e)}")
     
-    def parse_response(self, api_response: Any) -> str:
-        """解析API响应"""
+    def parse_response(self, api_response: Any) -> Tuple[str, Optional[str]]:
+        """解析API响应，返回(最终答案, 思维链内容)"""
+        reasoning_content = None
+        final_answer = ""
+        
         if hasattr(api_response, 'choices') and len(api_response.choices) > 0:
             choice = api_response.choices[0]
-            if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
-                return choice.message.content
-            elif hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
-                # 处理工具调用
-                tool_calls = choice.message.tool_calls
-                if tool_calls:
-                    return f"[工具调用] {len(tool_calls)}个工具调用"
+            if hasattr(choice, 'message'):
+                message = choice.message
+                
+                # 提取思维链内容（如果存在）
+                # 注意：当不开启思维链时，reasoning_content属性可能不存在
+                if hasattr(message, 'reasoning_content'):
+                    if message.reasoning_content:
+                        reasoning_content = message.reasoning_content
+                    # 如果reasoning_content存在但为空，保持None
+                
+                # 提取最终答案
+                if hasattr(message, 'content') and message.content:
+                    final_answer = message.content
+                elif hasattr(message, 'tool_calls'):
+                    # 处理工具调用
+                    tool_calls = message.tool_calls
+                    if tool_calls:
+                        final_answer = f"[工具调用] {len(tool_calls)}个工具调用"
         elif hasattr(api_response, 'text'):
-            return api_response.text
+            final_answer = api_response.text
+        else:
+            final_answer = str(api_response)
         
-        return str(api_response)
+        return final_answer, reasoning_content
 
 
 # 注册提供商
