@@ -1,6 +1,6 @@
 """
 重构的ChatGUI类
-支持根据提供商动态适配高级选项
+支持根据提供商动态适配高级选项和工具调用
 """
 import tkinter as tk
 from tkinter import scrolledtext, ttk, messagebox
@@ -29,6 +29,7 @@ class ChatGUIV2:
         # 创建UI组件
         self.create_config_frame()
         self.create_advanced_options_frame()
+        self.create_tools_frame()
         self.create_output_area()
         self.create_input_area()
         
@@ -122,6 +123,82 @@ class ChatGUIV2:
         self.reasoning_widget = None
         self.reasoning_var = None
 
+    def create_tools_frame(self):
+        """创建工具管理框架"""
+        self.tools_frame = tk.LabelFrame(self.root, text="Tool Management", padx=10, pady=5)
+        self.tools_frame.grid(row=2, column=0, padx=10, pady=(5, 5), sticky="ew")
+        
+        # 工具启用状态
+        self.tools_enabled_var = tk.BooleanVar(value=True)
+        self.tools_enabled_check = tk.Checkbutton(
+            self.tools_frame,
+            text="Enable Tools",
+            variable=self.tools_enabled_var,
+            command=self.on_tools_enabled_change
+        )
+        self.tools_enabled_check.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # 工具列表标签
+        tk.Label(self.tools_frame, text="Enabled Tools:").pack(side=tk.LEFT)
+        
+        # 工具列表显示
+        self.tools_list_var = tk.StringVar()
+        self.tools_list_label = tk.Label(
+            self.tools_frame,
+            textvariable=self.tools_list_var,
+            fg="blue",
+            font=("Microsoft YaHei", 9)
+        )
+        self.tools_list_label.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # 工具调用控制按钮框架
+        self.tool_control_frame = tk.Frame(self.tools_frame)
+        self.tool_control_frame.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # 执行工具按钮
+        self.execute_tools_btn = tk.Button(
+            self.tool_control_frame,
+            text="Execute Tools",
+            command=self.execute_pending_tools,
+            state="disabled",
+            width=12
+        )
+        self.execute_tools_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 发送工具结果按钮
+        self.send_tool_results_btn = tk.Button(
+            self.tool_control_frame,
+            text="Send Results",
+            command=self.send_tool_results,
+            state="disabled",
+            width=12
+        )
+        self.send_tool_results_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 取消工具调用按钮
+        self.cancel_tools_btn = tk.Button(
+            self.tool_control_frame,
+            text="Cancel",
+            command=self.cancel_tool_calls,
+            state="disabled",
+            width=8
+        )
+        self.cancel_tools_btn.pack(side=tk.LEFT)
+        
+        # 刷新工具列表
+        self.refresh_tools_list()
+    
+    def refresh_tools_list(self):
+        """刷新工具列表显示"""
+        if self.tools_enabled_var.get():
+            enabled_tools = self.chat_logic.get_enabled_tools()
+            if enabled_tools:
+                self.tools_list_var.set(", ".join(enabled_tools))
+            else:
+                self.tools_list_var.set("No tools enabled")
+        else:
+            self.tools_list_var.set("Tools disabled")
+    
     def refresh_ui_options(self):
         """根据当前提供商刷新UI选项"""
         constraints = self.chat_logic.get_option_constraints()
@@ -139,6 +216,10 @@ class ChatGUIV2:
         # 更新JSON支持
         json_supported = self.chat_logic.supports_feature("json_output")
         self.json_output_check.config(state="normal" if json_supported else "disabled")
+        
+        # 更新工具支持
+        tools_supported = self.chat_logic.supports_feature("tools")
+        self.tools_enabled_check.config(state="normal" if tools_supported else "disabled")
         
         # 动态创建思维链控件
         for widget in self.reasoning_container.winfo_children():
@@ -178,7 +259,10 @@ class ChatGUIV2:
              if isinstance(val, bool):
                  val = "on" if val else "off"
              self.chat_logic.set_option("reasoning", val)
-
+        
+        # 同步工具启用状态
+        self.on_tools_enabled_change()
+    
     def create_output_area(self):
         """创建输出和预览区域"""
         # 聊天输出区域
@@ -190,7 +274,7 @@ class ChatGUIV2:
             fg="#d4d4d4",
             font=("Microsoft YaHei", 10)
         )
-        self.output_area.grid(row=2, column=0, padx=10, pady=(5, 5), sticky="nsew")
+        self.output_area.grid(row=3, column=0, padx=10, pady=(5, 5), sticky="nsew")
         
         # Payload预览标签
         self.payload_label = tk.Label(
@@ -199,7 +283,7 @@ class ChatGUIV2:
             anchor="w",
             font=("Consolas", 9, "bold")
         )
-        self.payload_label.grid(row=3, column=0, padx=10, sticky="ew")
+        self.payload_label.grid(row=4, column=0, padx=10, sticky="ew")
         
         # Payload预览区域
         self.preview_area = scrolledtext.ScrolledText(
@@ -211,7 +295,7 @@ class ChatGUIV2:
             font=("Consolas", 9),
             height=8
         )
-        self.preview_area.grid(row=4, column=0, padx=10, pady=(0, 5), sticky="nsew")
+        self.preview_area.grid(row=5, column=0, padx=10, pady=(0, 5), sticky="nsew")
         
         # 样式标签
         self.output_area.tag_config("payload", foreground="#6a9955")
@@ -219,11 +303,13 @@ class ChatGUIV2:
         self.output_area.tag_config("assistant", foreground="#ce9178")
         self.output_area.tag_config("reasoning", foreground="#9cdcfe", font=("Microsoft YaHei", 9, "italic"))
         self.output_area.tag_config("reasoning_header", foreground="#d7ba7d", font=("Microsoft YaHei", 9, "bold"))
+        self.output_area.tag_config("tool_call", foreground="#b5cea8", font=("Microsoft YaHei", 9, "bold"))
+        self.output_area.tag_config("tool_result", foreground="#d7ba7d", font=("Microsoft YaHei", 9))
     
     def create_input_area(self):
         """创建输入区域"""
         self.input_frame = tk.Frame(self.root)
-        self.input_frame.grid(row=5, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.input_frame.grid(row=6, column=0, padx=10, pady=(0, 10), sticky="ew")
         self.input_frame.grid_columnconfigure(0, weight=1)
         
         # 输入文本框
@@ -309,6 +395,21 @@ class ChatGUIV2:
         except ValueError:
             pass
     
+    def on_tools_enabled_change(self):
+        """工具启用状态变更处理"""
+        if self.tools_enabled_var.get():
+            # 启用工具
+            self.chat_logic.set_option("tools_enabled", True)
+            # 重新加载工具配置
+            self.chat_logic._load_tools_to_options()
+        else:
+            # 禁用工具
+            self.chat_logic.set_option("tools_enabled", False)
+            self.chat_logic.options.tools = None
+        
+        self.refresh_tools_list()
+        self.update_preview()
+    
     def log(self, message, tag=None):
         """记录消息到输出区域"""
         self.output_area.configure(state='normal')
@@ -330,41 +431,141 @@ class ChatGUIV2:
             # 预览出错不弹窗，只在控制台打印
             print(f"Preview update error: {e}")
     
+    def clear_context(self):
+        """清空聊天上下文"""
+        self.chat_logic.clear_context()
+        self.output_area.configure(state='normal')
+        self.output_area.delete("1.0", tk.END)
+        self.output_area.configure(state='disabled')
+        self.log(f"[System] Context cleared. {self.chat_logic.get_current_provider()} - {self.chat_logic.get_current_model()}\n")
+    
     def send_message(self):
         """发送消息"""
         user_input = self.input_area.get("1.0", tk.END).strip()
         if not user_input:
             return
-        
+
         self.input_area.delete("1.0", tk.END)
         self.log(f"\nYou: {user_input}\n", "user")
         self.log("--- Sending Request ---\n", "payload")
         self.root.update_idletasks()
-        
+
         # 发送请求
         final_answer, reasoning_content, payload = self.chat_logic.chat(user_input)
-        
+
         # 显示payload
         self.log(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", "payload")
         self.log("--------------------\n", "payload")
-        
+
         # 显示思维链内容（如果存在）
         if reasoning_content:
-            self.log("\n[思维链过程]:\n", "reasoning_header")
+            self.log("\n[Reasoning]\n", "reasoning_header")
             self.log(f"{reasoning_content}\n", "reasoning")
         
-        # 显示最终答案
-        self.log(f"Assistant: {final_answer}\n", "assistant")
-        self.update_preview()
+        # 检查是否进入工具调用模式
+        if self.chat_logic.is_in_tool_call_mode():
+            # 显示工具调用信息
+            pending_tools = self.chat_logic.get_pending_tool_calls()
+            self.log(f"\n[Tool Call Mode] 检测到 {len(pending_tools)} 个工具调用:\n", "tool_call")
+            
+            for i, tool_call in enumerate(pending_tools, 1):
+                self.log(f"  {i}. {tool_call['function_name']}\n", "tool_call")
+                self.log(f"     参数: {json.dumps(tool_call['arguments'], indent=2, ensure_ascii=False)}\n", "tool_call")
+            
+            self.log("\n请使用工具管理区域的按钮执行工具并发送结果。\n", "tool_call")
+            
+            # 更新按钮状态
+            self.execute_tools_btn.config(state="normal")
+            self.send_tool_results_btn.config(state="disabled")
+            self.cancel_tools_btn.config(state="normal")
+            self.send_btn.config(state="disabled")
+        else:
+            # 显示最终答案
+            self.log(f"\nAssistant: {final_answer}\n", "assistant")
+            
+            # 确保按钮状态正常
+            self.execute_tools_btn.config(state="disabled")
+            self.send_tool_results_btn.config(state="disabled")
+            self.cancel_tools_btn.config(state="disabled")
+            self.send_btn.config(state="normal")
     
-    def clear_context(self):
-        """清空上下文"""
-        self.chat_logic.clear_context()
-        self.log("\n[System] Context cleared.\n")
-        self.update_preview()
-
+    def execute_pending_tools(self):
+        """执行待处理的工具调用"""
+        try:
+            # 执行工具
+            executed_tools = self.chat_logic.execute_pending_tools()
+            
+            # 显示执行结果
+            self.log(f"\n[Tool Execution] 执行了 {len(executed_tools)} 个工具:\n", "tool_result")
+            
+            for i, tool_result in enumerate(executed_tools, 1):
+                if "error" in tool_result:
+                    self.log(f"  {i}. ❌ {tool_result['function_name']}: {tool_result['error']}\n", "tool_result")
+                else:
+                    self.log(f"  {i}. ✅ {tool_result['function_name']}\n", "tool_result")
+                    # 显示工具结果（截断以避免过长）
+                    result_str = str(tool_result['result'])
+                    if len(result_str) > 500:
+                        result_str = result_str[:500] + "..."
+                    self.log(f"     结果: {result_str}\n", "tool_result")
+            
+            # 检查是否所有工具都已执行
+            pending_tools = self.chat_logic.get_pending_tool_calls()
+            all_executed = all(tool_call["executed"] for tool_call in pending_tools)
+            
+            if all_executed:
+                self.log("\n所有工具已执行完成，请点击'发送结果'按钮将结果发送给agent。\n", "tool_result")
+                self.send_tool_results_btn.config(state="normal")
+            else:
+                self.log(f"\n还有 {len([t for t in pending_tools if not t['executed']])} 个工具待执行。\n", "tool_result")
+                
+        except Exception as e:
+            messagebox.showerror("工具执行错误", f"执行工具时发生错误:\n{str(e)}")
+    
+    def send_tool_results(self):
+        """发送工具结果给agent"""
+        try:
+            self.log("\n[Tool Call Mode] 发送工具结果给agent...\n", "tool_call")
+            self.root.update_idletasks()
+            
+            # 发送工具结果
+            final_answer, reasoning_content, payload = self.chat_logic.send_tool_results_to_agent()
+            
+            # 显示payload
+            self.log(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", "payload")
+            self.log("--------------------\n", "payload")
+            
+            # 显示思维链内容（如果存在）
+            if reasoning_content:
+                self.log("\n[Reasoning]\n", "reasoning_header")
+                self.log(f"{reasoning_content}\n", "reasoning")
+            
+            # 显示最终答案
+            self.log(f"\nAssistant: {final_answer}\n", "assistant")
+            
+            # 重置按钮状态
+            self.execute_tools_btn.config(state="disabled")
+            self.send_tool_results_btn.config(state="disabled")
+            self.cancel_tools_btn.config(state="disabled")
+            self.send_btn.config(state="normal")
+            
+        except Exception as e:
+            messagebox.showerror("发送工具结果错误", f"发送工具结果时发生错误:\n{str(e)}")
+    
+    def cancel_tool_calls(self):
+        """取消工具调用"""
+        if messagebox.askyesno("取消工具调用", "确定要取消当前的工具调用吗？"):
+            self.chat_logic.cancel_tool_calls()
+            self.log("\n[Tool Call Mode] 工具调用已取消，恢复正常聊天模式。\n", "tool_call")
+            
+            # 重置按钮状态
+            self.execute_tools_btn.config(state="disabled")
+            self.send_tool_results_btn.config(state="disabled")
+            self.cancel_tools_btn.config(state="disabled")
+            self.send_btn.config(state="normal")
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = ChatGUIV2(root)
     root.mainloop()
+           

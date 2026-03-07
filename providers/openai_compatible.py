@@ -48,22 +48,39 @@ class OpenAICompatibleStrategy(ProviderStrategy):
         
         return options
 
-    def format_messages(self, messages: List[InternalMessage]) -> List[Dict[str, str]]:
+    def format_messages(self, messages: List[InternalMessage]) -> List[Dict[str, Any]]:
         """将内部消息格式转换为OpenAI格式"""
         formatted = []
         for msg in messages:
-            # 目前只处理文本消息
+            # 处理文本消息
             text_content = ""
             for part in msg.content:
                 if part.type == "text":
                     text_content += part.content
                 # 其他类型消息暂不处理
             
-            if text_content:
-                formatted.append({
-                    "role": msg.role,
-                    "content": text_content
-                })
+            # 构建基础消息
+            formatted_msg = {
+                "role": msg.role,
+                "content": text_content if text_content else ""
+            }
+            
+            # 处理tool消息
+            if msg.role == "tool":
+                tool_call_id = msg.metadata.get("tool_call_id")
+                if tool_call_id:
+                    formatted_msg["tool_call_id"] = tool_call_id
+            
+            # 处理包含tool_calls的assistant消息
+            elif msg.role == "assistant" and "tool_calls" in msg.metadata:
+                tool_calls = msg.metadata["tool_calls"]
+                if tool_calls:
+                    formatted_msg["tool_calls"] = tool_calls
+                    # 如果content为空，可以设置为None或空字符串
+                    if not formatted_msg["content"]:
+                        formatted_msg["content"] = None
+            
+            formatted.append(formatted_msg)
         return formatted
     
     def build_api_payload(

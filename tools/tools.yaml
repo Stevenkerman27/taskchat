@@ -1,0 +1,89 @@
+# 工具配置文件
+# 用于管理DeepSeek等模型的tool call功能
+
+# 预定义工具库
+tools:
+  # 文件系统工具
+  list_directory:
+    name: "list_directory"
+    description: "列出当前目录下的文件和文件夹"
+    parameters:
+      type: "object"
+      properties: {}
+      required: []
+    implementation: "system"
+    category: "filesystem"
+
+  # 计算器工具
+  calculate:
+    name: "calculate"
+    description: "计算数学表达式"
+    parameters:
+      type: "object"
+      properties:
+        expression:
+          type: "string"
+          description: "数学表达式，例如：2+3*4"
+      required: ["expression"]
+    implementation: "system"
+    category: "utility"
+  
+  # 时间工具
+  get_current_time:
+    name: "get_current_time"
+    description: "获取当前日期和时间"
+    parameters:
+      type: "object"
+      properties: {}
+      required: []
+    implementation: "system"
+    category: "information"
+  
+  # 网络工具
+  ping:
+    name: "ping"
+    description: "测试网络连接"
+    parameters:
+      type: "object"
+      properties:
+        host:
+          type: "string"
+          description: "主机名或IP地址"
+      required: ["host"]
+    implementation: "system"
+    category: "network"
+
+# 工具组配置
+tool_groups:
+  basic:
+    name: "基础工具"
+    description: "常用基础工具"
+    tools: ["list_directory", "get_current_time", "calculate", "ping"]
+
+# 默认工具配置
+defaults:
+  # 默认启用的工具组
+  enabled_groups: ["basic"]
+  
+  # 默认启用的单个工具
+  enabled_tools: []
+  
+  # 工具调用配置
+  tool_call_config:
+    max_iterations: 3  # 最大工具调用迭代次数
+    auto_execute: false  # 是否自动执行工具
+    require_confirmation: true  # 是否需要用户确认
+  
+  # 工具结果处理
+  result_handling:
+    auto_fill_input: true  # 自动用工具返回值填充输入框
+    ignore_user_input: true  # 忽略用户输入，使用工具结果
+    require_send_click: true  # 需要点击发送按钮才发送
+
+# 工具实现函数映射
+implementations:
+  system:
+    list_directory: "tools_impl.list_directory"
+    get_current_time: "tools_impl.get_current_time"
+    calculate: "tools_impl.calculate"
+    ping: "tools_impl.ping"
