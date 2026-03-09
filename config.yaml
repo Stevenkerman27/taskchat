@@ -9,13 +9,16 @@ providers:
   deepseek:
     name: "DeepSeek"
     api_key_env: "DS_API_KEY"
-    base_url: "https://api.deepseek.com"
+    base_url: "https://api.deepseek.com/beta"  # 使用beta端点以支持strict模式
     models: ["deepseek-chat", "deepseek-reasoner"]
     default_model: "deepseek-chat"
     features:
       reasoning:
         type: "boolean"  # OpenAI格式
         default: false
+      strict_tools:
+        type: "boolean"
+        default: true
     defaults:
       temperature: 1.0
       max_tokens: 4096

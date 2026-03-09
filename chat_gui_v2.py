@@ -7,6 +7,7 @@ from tkinter import scrolledtext, ttk, messagebox
 import json
 import traceback
 import sys
+import datetime
 from chat_logic_v2 import ChatLogicV2
 
 
@@ -339,6 +340,24 @@ class ChatGUIV2:
             width=12
         )
         self.clear_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        
+        # 保存聊天记录按钮
+        self.save_btn = tk.Button(
+            self.btn_frame,
+            text="Save Chat",
+            command=self.save_chat_context,
+            width=12
+        )
+        self.save_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, pady=(5, 0))
+        
+        # 加载聊天记录按钮
+        self.load_btn = tk.Button(
+            self.btn_frame,
+            text="Load Chat",
+            command=self.load_chat_context,
+            width=12
+        )
+        self.load_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, pady=(5, 0))
     
     def on_provider_change(self, event=None):
         """提供商变更处理"""
@@ -563,6 +582,208 @@ class ChatGUIV2:
             self.send_tool_results_btn.config(state="disabled")
             self.cancel_tools_btn.config(state="disabled")
             self.send_btn.config(state="normal")
+    
+    def save_chat_context(self):
+        """保存聊天上下文到文件"""
+        try:
+            # 检查是否处于思维链模式
+            if self.chat_logic.is_in_reasoning_mode():
+                messagebox.showerror("保存失败", "无法在思维链中途保存聊天记录")
+                return
+            
+            # 创建保存对话框
+            save_dialog = tk.Toplevel(self.root)
+            save_dialog.title("保存聊天记录")
+            save_dialog.geometry("400x200")
+            save_dialog.transient(self.root)
+            save_dialog.grab_set()
+            
+            # 默认文件名：当前日期时间
+            default_filename = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 文件名输入框
+            tk.Label(save_dialog, text="文件名:").pack(pady=(20, 5))
+            filename_var = tk.StringVar(value=default_filename)
+            filename_entry = tk.Entry(save_dialog, textvariable=filename_var, width=40)
+            filename_entry.pack(pady=5)
+            
+            # 信息显示
+            info_label = tk.Label(save_dialog, text=f"当前有 {len(self.chat_logic.messages)} 条消息")
+            info_label.pack(pady=5)
+            
+            def do_save():
+                filename = filename_var.get().strip()
+                if not filename:
+                    messagebox.showerror("错误", "文件名不能为空")
+                    return
+                
+                # 保存聊天记录
+                success = self.chat_logic.save_context_to_file(filename)
+                
+                if success:
+                    self.log(f"\n[System] 聊天记录已保存: {filename}.json\n")
+                    messagebox.showinfo("保存成功", f"聊天记录已保存为: {filename}.json")
+                    save_dialog.destroy()
+                else:
+                    messagebox.showerror("保存失败", "保存聊天记录失败")
+            
+            # 按钮框架
+            button_frame = tk.Frame(save_dialog)
+            button_frame.pack(pady=20)
+            
+            tk.Button(button_frame, text="保存", command=do_save, width=10).pack(side=tk.LEFT, padx=10)
+            tk.Button(button_frame, text="取消", command=save_dialog.destroy, width=10).pack(side=tk.LEFT, padx=10)
+            
+        except Exception as e:
+            messagebox.showerror("保存错误", f"保存聊天记录时发生错误:\n{str(e)}")
+    
+    def load_chat_context(self):
+        """从文件加载聊天上下文"""
+        try:
+            # 检查是否处于思维链模式
+            if self.chat_logic.is_in_reasoning_mode():
+                messagebox.showerror("加载失败", "无法在思维链中途加载聊天记录")
+                return
+            
+            # 获取保存的聊天记录列表
+            saved_contexts = self.chat_logic.list_saved_contexts()
+            
+            if not saved_contexts:
+                messagebox.showinfo("无聊天记录", "没有找到保存的聊天记录")
+                return
+            
+            # 创建加载对话框
+            load_dialog = tk.Toplevel(self.root)
+            load_dialog.title("加载聊天记录")
+            load_dialog.geometry("600x400")
+            load_dialog.transient(self.root)
+            load_dialog.grab_set()
+            
+            # 标题
+            tk.Label(load_dialog, text="选择要加载的聊天记录:", font=("Microsoft YaHei", 10, "bold")).pack(pady=10)
+            
+            # 创建列表框
+            list_frame = tk.Frame(load_dialog)
+            list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            
+            # 滚动条
+            scrollbar = tk.Scrollbar(list_frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # 列表框
+            context_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, height=15)
+            context_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.config(command=context_listbox.yview)
+            
+            # 添加聊天记录到列表框
+            for context in saved_contexts:
+                display_text = f"{context['filename']} | {context['saved_at']} | {context['provider']} - {context['model']} | {context['message_count']} 条消息"
+                context_listbox.insert(tk.END, display_text)
+            
+            # 详细信息显示区域
+            detail_frame = tk.LabelFrame(load_dialog, text="详细信息", padx=10, pady=5)
+            detail_frame.pack(fill=tk.X, padx=20, pady=10)
+            
+            detail_text = tk.Text(detail_frame, height=4, width=60, state='disabled')
+            detail_text.pack(fill=tk.X, pady=5)
+            
+            def update_detail(event):
+                selection = context_listbox.curselection()
+                if selection:
+                    index = selection[0]
+                    context = saved_contexts[index]
+                    
+                    detail_text.config(state='normal')
+                    detail_text.delete("1.0", tk.END)
+                    detail_text.insert(tk.END, 
+                        f"文件名: {context['filename']}\n"
+                        f"保存时间: {context['saved_at']}\n"
+                        f"提供商: {context['provider']}\n"
+                        f"模型: {context['model']}\n"
+                        f"消息数量: {context['message_count']} 条\n"
+                        f"文件大小: {context['size_kb']:.1f} KB"
+                    )
+                    detail_text.config(state='disabled')
+            
+            context_listbox.bind("<<ListboxSelect>>", update_detail)
+            
+            # 按钮框架
+            button_frame = tk.Frame(load_dialog)
+            button_frame.pack(pady=10)
+            
+            def do_load():
+                selection = context_listbox.curselection()
+                if not selection:
+                    messagebox.showerror("错误", "请选择要加载的聊天记录")
+                    return
+                
+                index = selection[0]
+                context = saved_contexts[index]
+                filename = context['filename']
+                
+                # 确认加载
+                if not messagebox.askyesno("确认加载", f"确定要加载聊天记录 '{filename}' 吗？\n这将覆盖当前的聊天上下文。"):
+                    return
+                
+                # 加载聊天记录
+                try:
+                    success = self.chat_logic.load_context_from_file(filename)
+                    
+                    if success:
+                        # 清空输出区域并显示加载的消息
+                        self.output_area.config(state='normal')
+                        self.output_area.delete("1.0", tk.END)
+                        self.output_area.config(state='disabled')
+                        
+                        self.log(f"[System] 已加载聊天记录: {filename}\n")
+                        self.log(f"[System] 包含 {context['message_count']} 条消息\n")
+                        self.log(f"[System] 提供商: {context['provider']} - 模型: {context['model']}\n")
+                        
+                        # 显示加载的消息
+                        if self.chat_logic.messages:
+                            self.log("\n--- 加载的聊天记录 ---\n")
+                            for i, msg in enumerate(self.chat_logic.messages, 1):
+                                role_display = "用户" if msg.role == "user" else "助手"
+                                # 安全地获取消息内容预览
+                                try:
+                                    if hasattr(msg, 'content') and msg.content:
+                                        # 如果是MessagePart列表，提取文本内容
+                                        if isinstance(msg.content, list) and len(msg.content) > 0:
+                                            first_part = msg.content[0]
+                                            if hasattr(first_part, 'content'):
+                                                content_preview = str(first_part.content)
+                                            else:
+                                                content_preview = str(first_part)
+                                        else:
+                                            content_preview = str(msg.content)
+                                    else:
+                                        content_preview = "[无内容]"
+                                except Exception as e:
+                                    content_preview = f"[内容获取错误: {e}]"
+                                
+                                # 截断预览
+                                if len(content_preview) > 100:
+                                    content_preview = content_preview[:100] + "..."
+                                
+                                self.log(f"{i}. [{role_display}] {content_preview}\n")
+                            self.log("--- 结束 ---\n")
+                        
+                        messagebox.showinfo("加载成功", f"聊天记录 '{filename}' 加载成功")
+                        load_dialog.destroy()
+                    else:
+                        messagebox.showerror("加载失败", "加载聊天记录失败")
+                except Exception as e:
+                    # 提供更详细的错误信息
+                    error_msg = str(e)
+                    if "JSON格式错误" in error_msg or "JSON解析错误" in error_msg:
+                        error_msg = f"文件格式错误: {error_msg}\n\n文件可能已损坏或不完整。"
+                    messagebox.showerror("加载失败", f"加载聊天记录时发生错误:\n{error_msg}")
+            
+            tk.Button(button_frame, text="加载", command=do_load, width=10).pack(side=tk.LEFT, padx=10)
+            tk.Button(button_frame, text="取消", command=load_dialog.destroy, width=10).pack(side=tk.LEFT, padx=10)
+            
+        except Exception as e:
+            messagebox.showerror("加载错误", f"加载聊天记录时发生错误:\n{str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()

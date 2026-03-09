@@ -3,3 +3,4 @@ chat.bat
 __pycache__/
 outputs/
 .clinerules/
+.vscode/

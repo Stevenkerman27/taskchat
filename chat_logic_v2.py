@@ -4,6 +4,7 @@
 """
 import os
 import yaml
+import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from message_models import InternalMessage, ChatOptions, ProviderConfig, create_text_message, convert_simple_messages
 from providers import get_provider_strategy, list_providers
@@ -26,6 +27,10 @@ class ChatLogicV2:
         self.tool_call_mode: bool = False
         self.last_user_input: str = ""
         self.last_payload: Dict[str, Any] = {}
+        
+        # 聊天记录保存相关
+        self.contexts_dir = "contexts"
+        self._ensure_contexts_dir()
     
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
@@ -108,7 +113,7 @@ class ChatLogicV2:
             self.options.tools = all_tools
     
     def _create_tool_definition(self, tool_name: str) -> Optional[Dict[str, Any]]:
-        """创建工具定义"""
+        """创建工具定义，遵循DeepSeek strict模式JSON Schema格式要求"""
         if tool_name not in self.tools_config.get('tools', {}):
             return None
         
@@ -118,6 +123,7 @@ class ChatLogicV2:
             "function": {
                 "name": tool_info.get('name', tool_name),
                 "description": tool_info.get('description', ''),
+                "strict": True,  # 启用strict模式
                 "parameters": tool_info.get('parameters', {})
             }
         }
@@ -423,3 +429,236 @@ class ChatLogicV2:
         enabled_tools.extend(enabled_tools_list)
         
         return list(set(enabled_tools))  # 去重
+    
+    def _ensure_contexts_dir(self):
+        """确保contexts目录存在"""
+        if not os.path.exists(self.contexts_dir):
+            os.makedirs(self.contexts_dir)
+    
+    def is_in_reasoning_mode(self) -> bool:
+        """
+        检查是否处于思维链模式
+        
+        Returns:
+            bool: 如果处于思维链中间则返回True
+        """
+        # 检查是否处于工具调用模式
+        if self.tool_call_mode:
+            return True
+        
+        # 检查是否有未完成的工具调用
+        if self.pending_tool_calls and not all(tool_call["executed"] for tool_call in self.pending_tool_calls):
+            return True
+        
+        # 检查最后一条消息是否是助手消息且包含思维链内容
+        if self.messages:
+            last_message = self.messages[-1]
+            if last_message.role == "assistant":
+                # 检查是否有思维链相关的元数据
+                if last_message.metadata and "reasoning" in last_message.metadata:
+                    return True
+        
+        return False
+    
+    def save_context_to_file(self, filename: str) -> bool:
+        """
+        保存当前聊天上下文到文件
+        
+        Args:
+            filename: 文件名（不需要扩展名）
+            
+        Returns:
+            bool: 保存是否成功
+        """
+        try:
+            # 检查是否处于思维链模式
+            if self.is_in_reasoning_mode():
+                raise ValueError("无法在思维链中途保存聊天记录")
+            
+            # 确保文件名有.json扩展名
+            if not filename.endswith('.json'):
+                filename = f"{filename}.json"
+            
+            filepath = os.path.join(self.contexts_dir, filename)
+            
+            # 准备保存的数据
+            save_data = {
+                "metadata": {
+                    "saved_at": datetime.datetime.now().isoformat(),
+                    "provider": self.get_current_provider(),
+                    "model": self.get_current_model(),
+                    "message_count": len(self.messages),
+                    "tool_call_mode": self.tool_call_mode,
+                    "pending_tools_count": len(self.pending_tool_calls)
+                },
+                "messages": []
+            }
+            
+            # 序列化消息 - 确保格式正确
+            for msg in self.messages:
+                # 将InternalMessage转换为可序列化的字典
+                # 使用model_dump()将MessagePart对象转换为字典
+                msg_dict = {
+                    "role": msg.role,
+                    "content": [part.model_dump() for part in msg.content],
+                    "metadata": msg.metadata
+                }
+                save_data["messages"].append(msg_dict)
+            
+            # 验证JSON格式正确性
+            json_str = json.dumps(save_data, ensure_ascii=False, indent=2)
+            
+            # 验证JSON格式
+            try:
+                json.loads(json_str)  # 验证JSON格式正确
+            except json.JSONDecodeError as e:
+                print(f"JSON格式验证失败: {e}")
+                return False
+            
+            # 原子写入：先写入临时文件，然后重命名为目标文件
+            import tempfile
+            temp_fd, temp_path = tempfile.mkstemp(dir=self.contexts_dir, suffix='.tmp')
+            try:
+                # 使用os.fdopen打开文件描述符
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    f.write(json_str)
+                    # 确保数据已写入磁盘
+                    f.flush()
+                    os.fsync(f.fileno())
+                # 重命名临时文件为目标文件（原子操作）
+                os.replace(temp_path, filepath)
+            except Exception as e:
+                # 清理临时文件
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+                raise e
+            
+            return True
+            
+        except Exception as e:
+            print(f"保存聊天记录失败: {e}")
+            return False
+    
+    def load_context_from_file(self, filename: str) -> bool:
+        """
+        从文件加载聊天上下文
+        
+        Args:
+            filename: 文件名（需要完整路径或相对路径）
+            
+        Returns:
+            bool: 加载是否成功
+        """
+        try:
+            # 检查是否处于思维链模式
+            if self.is_in_reasoning_mode():
+                raise ValueError("无法在思维链中途加载聊天记录")
+            
+            # 确保文件路径正确
+            if not os.path.isabs(filename):
+                filepath = os.path.join(self.contexts_dir, filename)
+            else:
+                filepath = filename
+            
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"文件不存在: {filepath}")
+            
+            # 读取文件并验证JSON格式
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    save_data = json.load(f)
+            except json.JSONDecodeError as e:
+                print(f"JSON解析错误: {e}")
+                # 尝试读取文件内容以提供更多信息
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                print(f"文件内容（前500字符）: {content[:500]}")
+                raise ValueError(f"JSON格式错误: {e}")
+            
+            # 验证数据格式
+            if "metadata" not in save_data or "messages" not in save_data:
+                raise ValueError("无效的聊天记录文件格式")
+            
+            # 验证消息格式
+            for i, msg_dict in enumerate(save_data["messages"]):
+                if "role" not in msg_dict or "content" not in msg_dict:
+                    raise ValueError(f"消息格式错误（索引 {i}）: 缺少必要字段")
+                
+                # 验证content格式
+                content = msg_dict["content"]
+                if not isinstance(content, list):
+                    raise ValueError(f"消息格式错误（索引 {i}）: content必须是列表")
+                
+                for j, part in enumerate(content):
+                    if not isinstance(part, dict) or "type" not in part or "content" not in part:
+                        raise ValueError(f"消息格式错误（索引 {i}, 部分 {j}）: 消息部分格式不正确")
+            
+            # 清空当前上下文
+            self.clear_context()
+            
+            # 恢复消息
+            for msg_dict in save_data["messages"]:
+                # 从字典恢复InternalMessage
+                message = InternalMessage(
+                    role=msg_dict["role"],
+                    content=msg_dict["content"],
+                    metadata=msg_dict.get("metadata", {})
+                )
+                self.messages.append(message)
+            
+            # 恢复工具调用状态（如果存在）
+            metadata = save_data["metadata"]
+            if metadata.get("tool_call_mode", False):
+                self.tool_call_mode = True
+                # 注意：pending_tool_calls无法从文件恢复，需要重新调用
+            
+            print(f"已加载聊天记录: {metadata.get('message_count', 0)} 条消息")
+            return True
+            
+        except Exception as e:
+            print(f"加载聊天记录失败: {e}")
+            return False
+    
+    def list_saved_contexts(self) -> List[Dict[str, Any]]:
+        """
+        列出所有保存的聊天记录文件
+        
+        Returns:
+            List[Dict[str, Any]]: 文件信息列表
+        """
+        try:
+            self._ensure_contexts_dir()
+            
+            contexts = []
+            for filename in os.listdir(self.contexts_dir):
+                if filename.endswith('.json'):
+                    filepath = os.path.join(self.contexts_dir, filename)
+                    try:
+                        # 读取元数据
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        metadata = data.get("metadata", {})
+                        contexts.append({
+                            "filename": filename,
+                            "filepath": filepath,
+                            "saved_at": metadata.get("saved_at", "未知"),
+                            "provider": metadata.get("provider", "未知"),
+                            "model": metadata.get("model", "未知"),
+                            "message_count": metadata.get("message_count", 0),
+                            "size_kb": os.path.getsize(filepath) / 1024
+                        })
+                    except Exception as e:
+                        # 跳过无法读取的文件
+                        print(f"无法读取文件 {filename}: {e}")
+                        continue
+            
+            # 按保存时间排序（最新的在前）
+            contexts.sort(key=lambda x: x.get("saved_at", ""), reverse=True)
+            return contexts
+            
+        except Exception as e:
+            print(f"列出聊天记录失败: {e}")
+            return []

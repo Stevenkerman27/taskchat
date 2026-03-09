@@ -1,5 +1,6 @@
 # 工具配置文件
 # 用于管理DeepSeek等模型的tool call功能
+# 遵循DeepSeek strict模式JSON Schema格式要求
 
 # 预定义工具库
 tools:
@@ -11,6 +12,7 @@ tools:
       type: "object"
       properties: {}
       required: []
+      additionalProperties: false
     implementation: "system"
     category: "filesystem"
 
@@ -25,6 +27,7 @@ tools:
           type: "string"
           description: "数学表达式，例如：2+3*4"
       required: ["expression"]
+      additionalProperties: false
     implementation: "system"
     category: "utility"
   
@@ -36,6 +39,7 @@ tools:
       type: "object"
       properties: {}
       required: []
+      additionalProperties: false
     implementation: "system"
     category: "information"
   
@@ -50,6 +54,7 @@ tools:
           type: "string"
           description: "主机名或IP地址"
       required: ["host"]
+      additionalProperties: false
     implementation: "system"
     category: "network"
 
