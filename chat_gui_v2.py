@@ -655,7 +655,7 @@ class ChatGUIV2:
             # 创建加载对话框
             load_dialog = tk.Toplevel(self.root)
             load_dialog.title("加载聊天记录")
-            load_dialog.geometry("600x400")
+            load_dialog.geometry("600x500")
             load_dialog.transient(self.root)
             load_dialog.grab_set()
             
@@ -761,10 +761,7 @@ class ChatGUIV2:
                                 except Exception as e:
                                     content_preview = f"[内容获取错误: {e}]"
                                 
-                                # 截断预览
-                                if len(content_preview) > 100:
-                                    content_preview = content_preview[:100] + "..."
-                                
+                                # 显示完整内容，不截断
                                 self.log(f"{i}. [{role_display}] {content_preview}\n")
                             self.log("--- 结束 ---\n")
                         
