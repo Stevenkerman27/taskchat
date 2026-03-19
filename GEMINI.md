@@ -1,3 +1,4 @@
+我需要你帮助我开发agent程序。主文件为chat_logic_v2.py和chat_gui_v2.py
 使用myml python环境,禁止修改此文件
 使用API前，调用context7 MCP查询文档
 阅读task.md, 完成最新一条未完成的任务

@@ -73,6 +73,7 @@ class ChatLogicV2:
         provider_config = self.providers_configs[default_provider_name]
         strategy_class = get_provider_strategy(default_provider_name)
         self.current_strategy = strategy_class(provider_config)
+        self.current_provider_name = default_provider_name
         
         # 应用提供商默认选项
         self.options = self.current_strategy.get_default_options()
@@ -140,6 +141,7 @@ class ChatLogicV2:
         
         # 创建新的策略实例
         self.current_strategy = strategy_class(provider_config)
+        self.current_provider_name = provider_name
         
         # 如果指定了模型，则切换到该模型
         if model:
@@ -385,14 +387,17 @@ class ChatLogicV2:
         # 回退上下文，撤销由于未完成的工具调用链引发的所有消息
         while self.messages:
             last_msg = self.messages[-1]
-            if last_msg.role == "assistant":
+            if last_msg.role == "tool":
+                self.messages.pop()
+            elif last_msg.role == "assistant":
                 metadata = last_msg.metadata or {}
-                if "tool_calls" not in metadata:
+                if "tool_calls" in metadata:
+                    self.messages.pop()
+                else:
                     break
-            elif last_msg.role == "system":
+            else:
+                # 遇到 user 或 system 消息时停止回退
                 break
-            
-            self.messages.pop()
     
     def _create_assistant_message_with_tool_calls(self, tool_calls: List[Any]) -> InternalMessage:
         """创建包含tool_calls的助手消息"""
@@ -428,10 +433,7 @@ class ChatLogicV2:
     
     def get_current_provider(self) -> str:
         """获取当前提供商标识"""
-        for name, config in self.providers_configs.items():
-            if config.api_key_env == self.current_strategy.config.api_key_env:
-                return name
-        return "unknown"
+        return getattr(self, 'current_provider_name', "unknown")
     
     def get_current_model(self) -> str:
         """获取当前模型名称"""
@@ -521,6 +523,9 @@ class ChatLogicV2:
             # 确保文件名有.json扩展名
             if not filename.endswith('.json'):
                 filename = f"{filename}.json"
+                
+            # 防御路径穿越攻击
+            filename = os.path.basename(filename)
             
             filepath = os.path.join(self.contexts_dir, filename)
             
@@ -580,9 +585,8 @@ class ChatLogicV2:
             
             return True
             
-        except Exception as e:
-            print(f"保存聊天记录失败: {e}")
-            return False
+        except Exception:
+            raise
     
     def load_context_from_file(self, filename: str) -> bool:
         """
@@ -660,9 +664,8 @@ class ChatLogicV2:
             print(f"已加载聊天记录: {metadata.get('message_count', 0)} 条消息")
             return True
             
-        except Exception as e:
-            print(f"加载聊天记录失败: {e}")
-            return False
+        except Exception:
+            raise
     
     def list_saved_contexts(self) -> List[Dict[str, Any]]:
         """

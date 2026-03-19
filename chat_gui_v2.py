@@ -12,6 +12,14 @@ from chat_logic_v2 import ChatLogicV2
 
 
 class ChatGUIV2:
+    FONT_MAIN = ("Microsoft YaHei", 10)
+    FONT_BOLD = ("Microsoft YaHei", 10, "bold")
+    FONT_ITALIC = ("Microsoft YaHei", 9, "italic")
+    FONT_SMALL = ("Microsoft YaHei", 9)
+    FONT_SMALL_BOLD = ("Microsoft YaHei", 9, "bold")
+    FONT_MONO = ("Consolas", 9)
+    FONT_MONO_BOLD = ("Consolas", 9, "bold")
+
     def __init__(self, root):
         self.root = root
         self.root.title("Multi-Model Chat GUI v2 - Architecture Optimized")
@@ -23,8 +31,8 @@ class ChatGUIV2:
             sys.exit(1)
         
         # 布局配置
-        self.root.grid_rowconfigure(2, weight=3)
-        self.root.grid_rowconfigure(3, weight=1)
+        self.root.grid_rowconfigure(3, weight=3) # Chat Output
+        self.root.grid_rowconfigure(5, weight=1) # Preview Area
         self.root.grid_columnconfigure(0, weight=1)
         
         # 创建UI组件
@@ -76,23 +84,21 @@ class ChatGUIV2:
         self.options_frame.grid(row=1, column=0, padx=10, pady=(5, 5), sticky="ew")
         
         # 温度设置
-        tk.Label(self.options_frame, text="Temperature:").grid(row=0, column=0, sticky="w")
+        tk.Label(self.options_frame, text="Temperature:").pack(side=tk.LEFT, padx=(0, 5))
         self.temperature_var = tk.DoubleVar(value=0.7)
-        self.temperature_scale = tk.Scale(
+        self.temperature_spinbox = tk.Spinbox(
             self.options_frame,
             from_=0.0,
             to=2.0,
-            resolution=0.1,
-            orient=tk.HORIZONTAL,
-            variable=self.temperature_var,
-            length=200,
+            increment=0.1,
+            textvariable=self.temperature_var,
+            width=5,
             command=self.on_temperature_change
         )
-        self.temperature_scale.grid(row=0, column=1, padx=(5, 20), sticky="w")
-        
-        # 温度值显示
-        self.temperature_label = tk.Label(self.options_frame, text="0.7")
-        self.temperature_label.grid(row=0, column=2, sticky="w")
+        self.temperature_spinbox.pack(side=tk.LEFT, padx=(0, 20))
+        # 绑定回车键，实时更新
+        self.temperature_spinbox.bind("<Return>", lambda e: self.on_temperature_change())
+        self.temperature_spinbox.bind("<FocusOut>", lambda e: self.on_temperature_change())
         
         # JSON输出模式
         self.json_output_var = tk.BooleanVar(value=False)
@@ -102,10 +108,10 @@ class ChatGUIV2:
             variable=self.json_output_var,
             command=self.on_json_output_change
         )
-        self.json_output_check.grid(row=0, column=3, padx=(20, 10), sticky="w")
+        self.json_output_check.pack(side=tk.LEFT, padx=(0, 20))
         
         # 最大token数
-        tk.Label(self.options_frame, text="Max Tokens:").grid(row=1, column=2, sticky="w", pady=(10, 0))
+        tk.Label(self.options_frame, text="Max Tokens:").pack(side=tk.LEFT, padx=(0, 5))
         self.max_tokens_var = tk.IntVar(value=1000)
         self.max_tokens_spinbox = tk.Spinbox(
             self.options_frame,
@@ -116,11 +122,11 @@ class ChatGUIV2:
             width=8,
             command=self.on_max_tokens_change
         )
-        self.max_tokens_spinbox.grid(row=1, column=3, padx=(5, 10), pady=(10, 0), sticky="w")
+        self.max_tokens_spinbox.pack(side=tk.LEFT, padx=(0, 20))
         
         # 思维链容器
         self.reasoning_container = tk.Frame(self.options_frame)
-        self.reasoning_container.grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.reasoning_container.pack(side=tk.LEFT)
         self.reasoning_widget = None
         self.reasoning_var = None
 
@@ -129,33 +135,31 @@ class ChatGUIV2:
         self.tools_frame = tk.LabelFrame(self.root, text="Tool Management", padx=10, pady=5)
         self.tools_frame.grid(row=2, column=0, padx=10, pady=(5, 5), sticky="ew")
         
-        # 工具组选择框架
-        self.tool_groups_frame = tk.Frame(self.tools_frame)
-        self.tool_groups_frame.pack(side=tk.LEFT, padx=(0, 20))
+        # 使用 Grid 布局使位置固定
+        self.tools_frame.grid_columnconfigure(1, weight=1) # 中间部分可拉伸
         
-        # 工具组标签
-        tk.Label(self.tool_groups_frame, text="Tool Groups:").pack(side=tk.LEFT)
+        # 1. 工具组行 (Row 0)
+        tk.Label(self.tools_frame, text="Tool Groups:").grid(row=0, column=0, sticky="nw", padx=(0, 10), pady=2)
+        self.tool_groups_container = tk.Frame(self.tools_frame)
+        self.tool_groups_container.grid(row=0, column=1, sticky="nw", pady=2)
         
-        # 工具组选择容器
-        self.tool_groups_container = tk.Frame(self.tool_groups_frame)
-        self.tool_groups_container.pack(side=tk.LEFT, padx=(5, 0))
-        
-        # 工具列表标签
-        tk.Label(self.tools_frame, text="Enabled Tools:").pack(side=tk.LEFT)
-        
-        # 工具列表显示
+        # 2. 启用工具行 (Row 1)
+        tk.Label(self.tools_frame, text="Enabled Tools:").grid(row=1, column=0, sticky="nw", padx=(0, 10), pady=2)
         self.tools_list_var = tk.StringVar()
         self.tools_list_label = tk.Label(
             self.tools_frame,
             textvariable=self.tools_list_var,
             fg="blue",
-            font=("Microsoft YaHei", 9)
+            font=("Microsoft YaHei", 9),
+            wraplength=600, # 设置换行长度防止窗口变宽
+            justify=tk.LEFT,
+            anchor="w"
         )
-        self.tools_list_label.pack(side=tk.LEFT, padx=(5, 0))
+        self.tools_list_label.grid(row=1, column=1, sticky="nw", pady=2)
         
-        # 工具调用控制按钮框架
+        # 3. 工具调用控制按钮框架 (放在右侧，跨两行)
         self.tool_control_frame = tk.Frame(self.tools_frame)
-        self.tool_control_frame.pack(side=tk.RIGHT, padx=(10, 0))
+        self.tool_control_frame.grid(row=0, column=2, rowspan=2, sticky="ne", padx=(10, 0))
         
         # 执行工具按钮
         self.execute_tools_btn = tk.Button(
@@ -208,8 +212,8 @@ class ChatGUIV2:
         # 存储工具组变量
         self.tool_group_vars = {}
         
-        # 为每个工具组创建复选框
-        for group_name, group_info in tool_groups.items():
+        # 为每个工具组创建复选框，全部放在一行显示
+        for i, (group_name, group_info) in enumerate(tool_groups.items()):
             var = tk.BooleanVar(value=group_name in enabled_groups)
             self.tool_group_vars[group_name] = var
             
@@ -220,7 +224,8 @@ class ChatGUIV2:
                 variable=var,
                 command=lambda g=group_name: self.on_tool_group_change(g)
             )
-            check.pack(side=tk.LEFT, padx=(0, 10))
+            # 使用网格布局，全部放在第0行，依次排在不同列
+            check.grid(row=0, column=i, sticky="w", padx=(0, 10))
     
     def on_tool_group_change(self, group_name):
         """工具组选择变更处理"""
@@ -255,12 +260,11 @@ class ChatGUIV2:
         """根据当前提供商刷新UI选项"""
         constraints = self.chat_logic.get_option_constraints()
         defaults = self.chat_logic.get_default_options()
-        
+
         # 更新温度范围
         temp_range = constraints.get("temperature_range", [0.0, 2.0])
-        self.temperature_scale.config(from_=temp_range[0], to=temp_range[1])
+        self.temperature_spinbox.config(from_=temp_range[0], to=temp_range[1])
         self.temperature_var.set(defaults.temperature or 0.7)
-        self.temperature_label.config(text=f"{self.temperature_var.get():.1f}")
         
         # 更新最大token
         self.max_tokens_var.set(defaults.max_tokens or 1000)
@@ -310,14 +314,15 @@ class ChatGUIV2:
     
     def create_output_area(self):
         """创建输出和预览区域"""
-        # 聊天输出区域
+        # 聊天输出区
         self.output_area = scrolledtext.ScrolledText(
             self.root,
             wrap=tk.WORD,
             state='disabled',
             bg="#1e1e1e",
             fg="#d4d4d4",
-            font=("Microsoft YaHei", 10)
+            font=("Microsoft YaHei", 10),
+            height=16
         )
         self.output_area.grid(row=3, column=0, padx=10, pady=(5, 5), sticky="nsew")
         
@@ -330,7 +335,7 @@ class ChatGUIV2:
         )
         self.payload_label.grid(row=4, column=0, padx=10, sticky="ew")
         
-        # Payload预览区域
+        # Payload预览区域 - 缩减高度
         self.preview_area = scrolledtext.ScrolledText(
             self.root,
             wrap=tk.WORD,
@@ -358,7 +363,7 @@ class ChatGUIV2:
         self.input_frame.grid_columnconfigure(0, weight=1)
         
         # 输入文本框
-        self.input_area = tk.Text(self.input_frame, height=4, font=("Microsoft YaHei", 10))
+        self.input_area = tk.Text(self.input_frame, height=6, font=("Microsoft YaHei", 10))
         self.input_area.grid(row=0, column=0, sticky="ew")
         self.input_area.bind("<Control-Return>", lambda event: self.send_message())
         self.input_area.bind("<KeyRelease>", lambda event: self.update_preview())
@@ -370,7 +375,7 @@ class ChatGUIV2:
         # 发送按钮
         self.send_btn = tk.Button(
             self.btn_frame,
-            text="Send\n(Ctrl+Enter)",
+            text="Send",
             command=self.send_message,
             width=12
         )
@@ -425,14 +430,14 @@ class ChatGUIV2:
             messagebox.showerror("Error", f"Failed to switch provider/model:\n{str(e)}")
             traceback.print_exc()
     
-    def on_temperature_change(self, value):
+    def on_temperature_change(self, value=None):
         """温度变更处理"""
         try:
-            temperature = float(value)
-            self.temperature_label.config(text=f"{temperature:.1f}")
+            # 直接从变量获取值，忽略可能由 Scale 传入的参数
+            temperature = self.temperature_var.get()
             self.chat_logic.set_option("temperature", temperature)
             self.update_preview()
-        except ValueError:
+        except (ValueError, tk.TclError):
             pass
     
     def on_json_output_change(self):
