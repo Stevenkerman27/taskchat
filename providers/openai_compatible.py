@@ -136,6 +136,8 @@ class OpenAICompatibleStrategy(ProviderStrategy):
         
         if hasattr(api_response, 'choices') and len(api_response.choices) > 0:
             choice = api_response.choices[0]
+            finish_reason = getattr(choice, 'finish_reason', None)
+            
             if hasattr(choice, 'message'):
                 message = choice.message
                 
@@ -149,11 +151,16 @@ class OpenAICompatibleStrategy(ProviderStrategy):
                 # 提取最终答案
                 if hasattr(message, 'content') and message.content:
                     final_answer = message.content
-                elif hasattr(message, 'tool_calls'):
+                elif hasattr(message, 'tool_calls') and message.tool_calls:
                     # 处理工具调用
                     tool_calls = message.tool_calls
-                    if tool_calls:
-                        final_answer = f"[工具调用] {len(tool_calls)}个工具调用"
+                    final_answer = f"[工具调用] {len(tool_calls)}个工具调用"
+                else:
+                    # Content为空且没有tool_calls
+                    if finish_reason in ['length', 'content_filter']:
+                        final_answer = f"[系统警告: 模型生成异常终止 (finish_reason: {finish_reason})，可能被截断或触发安全风控]"
+                    else:
+                        final_answer = ""
         elif hasattr(api_response, 'text'):
             final_answer = api_response.text
         else:

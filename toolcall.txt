@@ -1,0 +1,808 @@
+System initialized. deepseek - deepseek-chat
+
+[System] Switched to Silicon_flow - deepseek-ai/DeepSeek-V3.2
+
+You: 浏览当前工作目录下的文件。如有test_write.txt，读取其中的内容，将其移入test文件夹，并并在其中写入hello world
+--- Sending Request ---
+{
+  "model": "deepseek-ai/DeepSeek-V3.2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "浏览当前工作目录下的文件。如有test_write.txt，读取其中的内容，将其移入test文件夹，并并在其中写入hello world"
+    }
+  ],
+  "stream": false,
+  "temperature": 1.0,
+  "max_tokens": 4096,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_directory",
+        "description": "列出指定目录下的文件和文件夹",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "目录路径（相对路径），默认为当前目录"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_file",
+        "description": "移动或重命名文件/目录",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "源文件/目录路径（相对路径）"
+            },
+            "destination": {
+              "type": "string",
+              "description": "目标文件/目录路径（相对路径）"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file_content",
+        "description": "读取指定文件的文本内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            }
+          },
+          "required": [
+            "filepath"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_file_content",
+        "description": "写入或修改文件内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            },
+            "content": {
+              "type": "string",
+              "description": "要写入的内容"
+            }
+          },
+          "required": [
+            "filepath",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "extra_body": {
+    "thinking": {
+      "type": "enabled"
+    }
+  }
+}
+--------------------
+
+[Tool Call Mode] 检测到 1 个工具调用:
+  1. list_directory
+     参数: {
+  "path": "."
+}
+
+请使用工具管理区域的按钮执行工具并发送结果。
+
+[Tool Execution] 执行了 1 个工具:
+  1. ✅ list_directory
+     结果: {
+  "current_directory": "D:\\3D\\Projects\\AI\\code\\taskchat",
+  "target_directory": "D:\\3D\\Projects\\AI\\code\\taskchat",
+  "relative_path": ".",
+  "files": [
+    {
+      "name": ".clinerules",
+      "size": 0,
+      "modified": "2026-03-09T01:00:14.971838",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": ".git",
+      "size": 4096,
+      "modified": "2026-03-09T22:20:33.111713",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": ".gitignore",
+      "size": 65,
+      "modified": "2026-03-07T15:57:45.871022",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": ".vscode",
+      "size": 0,
+      "modified": "2026-02-27T18:22:00.125550",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "bin",
+      "size": 0,
+      "modified": "2026-03-09T17:24:06.146640",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "chat.bat",
+      "size": 254,
+      "modified": "2026-02-28T12:29:47.854269",
+      "is_dir": false,
+      "permissions": "777"
+    },
+    {
+      "name": "chat_gui_v2.py",
+      "size": 37341,
+      "modified": "2026-03-18T23:46:37.908747",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "chat_logic_v2.py",
+      "size": 28803,
+      "modified": "2026-03-18T23:39:50.129202",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "config.yaml",
+      "size": 1690,
+      "modified": "2026-03-08T17:34:53.833290",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "contexts",
+      "size": 4096,
+      "modified": "2026-03-09T22:11:07.497496",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "message_models.py",
+      "size": 2643,
+      "modified": "2026-02-28T12:22:53.561272",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "outputs",
+      "size": 0,
+      "modified": "2026-02-28T11:36:44.036504",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "progress",
+      "size": 4096,
+      "modified": "2026-03-18T22:18:58.949410",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "providers",
+      "size": 4096,
+      "modified": "2026-02-28T11:29:36.014327",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "README.md",
+      "size": 40,
+      "modified": "2026-02-28T11:19:42.985512",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "rules.md",
+      "size": 2508,
+      "modified": "2026-03-18T22:18:52.490439",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "simple working egs",
+      "size": 4096,
+      "modified": "2026-03-08T17:29:04.431445",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "task.md",
+      "size": 1283,
+      "modified": "2026-03-18T22:37:06.079998",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "test",
+      "size": 0,
+      "modified": "2026-03-18T22:38:44.271693",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "test_write.txt",
+      "size": 12,
+      "modified": "2026-03-18T22:25:17.284025",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "toolcall.txt",
+      "size": 15543,
+      "modified": "2026-03-18T23:45:21.586188",
+      "is_dir": false,
+      "permissions": "666"
+    },
+    {
+      "name": "tools",
+      "size": 4096,
+      "modified": "2026-03-07T15:52:29.824697",
+      "is_dir": true,
+      "permissions": "777"
+    },
+    {
+      "name": "__pycache__",
+      "size": 4096,
+      "modified": "2026-03-18T23:41:27.254302",
+      "is_dir": true,
+      "permissions": "777"
+    }
+  ],
+  "count": 23,
+  "timestamp": "2026-03-18T23:49:05.672555"
+}
+
+所有工具已执行完成，请点击'发送结果'按钮将结果发送给agent。
+
+[Tool Call Mode] 发送工具结果给agent...
+{
+  "model": "deepseek-ai/DeepSeek-V3.2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "浏览当前工作目录下的文件。如有test_write.txt，读取其中的内容，将其移入test文件夹，并并在其中写入hello world"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035a2d94b2eeb983d18554078d35",
+          "type": "function",
+          "function": {
+            "name": "list_directory",
+            "arguments": "{\"path\": \".\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"current_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"target_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"relative_path\": \".\",\n  \"files\": [\n    {\n      \"name\": \".clinerules\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T01:00:14.971838\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".git\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:20:33.111713\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".gitignore\",\n      \"size\": 65,\n      \"modified\": \"2026-03-07T15:57:45.871022\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \".vscode\",\n      \"size\": 0,\n      \"modified\": \"2026-02-27T18:22:00.125550\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"bin\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T17:24:06.146640\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat.bat\",\n      \"size\": 254,\n      \"modified\": \"2026-02-28T12:29:47.854269\",\n      \"is_dir\": false,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat_gui_v2.py\",\n      \"size\": 37341,\n      \"modified\": \"2026-03-18T23:46:37.908747\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"chat_logic_v2.py\",\n      \"size\": 28803,\n      \"modified\": \"2026-03-18T23:39:50.129202\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"config.yaml\",\n      \"size\": 1690,\n      \"modified\": \"2026-03-08T17:34:53.833290\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"contexts\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:11:07.497496\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"message_models.py\",\n      \"size\": 2643,\n      \"modified\": \"2026-02-28T12:22:53.561272\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"outputs\",\n      \"size\": 0,\n      \"modified\": \"2026-02-28T11:36:44.036504\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"progress\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T22:18:58.949410\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"providers\",\n      \"size\": 4096,\n      \"modified\": \"2026-02-28T11:29:36.014327\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"README.md\",\n      \"size\": 40,\n      \"modified\": \"2026-02-28T11:19:42.985512\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"rules.md\",\n      \"size\": 2508,\n      \"modified\": \"2026-03-18T22:18:52.490439\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"simple working egs\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-08T17:29:04.431445\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"task.md\",\n      \"size\": 1283,\n      \"modified\": \"2026-03-18T22:37:06.079998\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"test\",\n      \"size\": 0,\n      \"modified\": \"2026-03-18T22:38:44.271693\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"test_write.txt\",\n      \"size\": 12,\n      \"modified\": \"2026-03-18T22:25:17.284025\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"toolcall.txt\",\n      \"size\": 15543,\n      \"modified\": \"2026-03-18T23:45:21.586188\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"tools\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-07T15:52:29.824697\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"__pycache__\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T23:41:27.254302\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    }\n  ],\n  \"count\": 23,\n  \"timestamp\": \"2026-03-18T23:49:05.672555\"\n}",
+      "tool_call_id": "019d035a2d94b2eeb983d18554078d35"
+    }
+  ],
+  "stream": false,
+  "temperature": 1.0,
+  "max_tokens": 4096,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_directory",
+        "description": "列出指定目录下的文件和文件夹",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "目录路径（相对路径），默认为当前目录"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_file",
+        "description": "移动或重命名文件/目录",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "源文件/目录路径（相对路径）"
+            },
+            "destination": {
+              "type": "string",
+              "description": "目标文件/目录路径（相对路径）"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file_content",
+        "description": "读取指定文件的文本内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            }
+          },
+          "required": [
+            "filepath"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_file_content",
+        "description": "写入或修改文件内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            },
+            "content": {
+              "type": "string",
+              "description": "要写入的内容"
+            }
+          },
+          "required": [
+            "filepath",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "extra_body": {
+    "thinking": {
+      "type": "enabled"
+    }
+  }
+}
+--------------------
+
+[Tool Call Mode] 检测到 1 个工具调用:
+  1. read_file_content
+     参数: {
+  "filepath": "test_write.txt"
+}
+
+请使用工具管理区域的按钮执行工具并发送结果。
+
+[Tool Execution] 执行了 1 个工具:
+  1. ✅ read_file_content
+     结果: {
+  "filepath": "test_write.txt",
+  "absolute_path": "D:\\3D\\Projects\\AI\\code\\taskchat\\test_write.txt",
+  "content": "测试内容",
+  "size": 12,
+  "encoding": "utf-8",
+  "lines": 1,
+  "modified": "2026-03-18T22:25:17.284025",
+  "timestamp": "2026-03-18T23:49:40.853115"
+}
+
+所有工具已执行完成，请点击'发送结果'按钮将结果发送给agent。
+
+[Tool Call Mode] 发送工具结果给agent...
+{
+  "model": "deepseek-ai/DeepSeek-V3.2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "浏览当前工作目录下的文件。如有test_write.txt，读取其中的内容，将其移入test文件夹，并并在其中写入hello world"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035a2d94b2eeb983d18554078d35",
+          "type": "function",
+          "function": {
+            "name": "list_directory",
+            "arguments": "{\"path\": \".\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"current_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"target_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"relative_path\": \".\",\n  \"files\": [\n    {\n      \"name\": \".clinerules\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T01:00:14.971838\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".git\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:20:33.111713\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".gitignore\",\n      \"size\": 65,\n      \"modified\": \"2026-03-07T15:57:45.871022\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \".vscode\",\n      \"size\": 0,\n      \"modified\": \"2026-02-27T18:22:00.125550\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"bin\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T17:24:06.146640\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat.bat\",\n      \"size\": 254,\n      \"modified\": \"2026-02-28T12:29:47.854269\",\n      \"is_dir\": false,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat_gui_v2.py\",\n      \"size\": 37341,\n      \"modified\": \"2026-03-18T23:46:37.908747\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"chat_logic_v2.py\",\n      \"size\": 28803,\n      \"modified\": \"2026-03-18T23:39:50.129202\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"config.yaml\",\n      \"size\": 1690,\n      \"modified\": \"2026-03-08T17:34:53.833290\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"contexts\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:11:07.497496\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"message_models.py\",\n      \"size\": 2643,\n      \"modified\": \"2026-02-28T12:22:53.561272\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"outputs\",\n      \"size\": 0,\n      \"modified\": \"2026-02-28T11:36:44.036504\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"progress\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T22:18:58.949410\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"providers\",\n      \"size\": 4096,\n      \"modified\": \"2026-02-28T11:29:36.014327\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"README.md\",\n      \"size\": 40,\n      \"modified\": \"2026-02-28T11:19:42.985512\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"rules.md\",\n      \"size\": 2508,\n      \"modified\": \"2026-03-18T22:18:52.490439\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"simple working egs\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-08T17:29:04.431445\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"task.md\",\n      \"size\": 1283,\n      \"modified\": \"2026-03-18T22:37:06.079998\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"test\",\n      \"size\": 0,\n      \"modified\": \"2026-03-18T22:38:44.271693\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"test_write.txt\",\n      \"size\": 12,\n      \"modified\": \"2026-03-18T22:25:17.284025\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"toolcall.txt\",\n      \"size\": 15543,\n      \"modified\": \"2026-03-18T23:45:21.586188\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"tools\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-07T15:52:29.824697\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"__pycache__\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T23:41:27.254302\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    }\n  ],\n  \"count\": 23,\n  \"timestamp\": \"2026-03-18T23:49:05.672555\"\n}",
+      "tool_call_id": "019d035a2d94b2eeb983d18554078d35"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035ab73140293f475cb2aac65c16",
+          "type": "function",
+          "function": {
+            "name": "read_file_content",
+            "arguments": "{\"filepath\": \"test_write.txt\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"filepath\": \"test_write.txt\",\n  \"absolute_path\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\\\\test_write.txt\",\n  \"content\": \"测试内容\",\n  \"size\": 12,\n  \"encoding\": \"utf-8\",\n  \"lines\": 1,\n  \"modified\": \"2026-03-18T22:25:17.284025\",\n  \"timestamp\": \"2026-03-18T23:49:40.853115\"\n}",
+      "tool_call_id": "019d035ab73140293f475cb2aac65c16"
+    }
+  ],
+  "stream": false,
+  "temperature": 1.0,
+  "max_tokens": 4096,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_directory",
+        "description": "列出指定目录下的文件和文件夹",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "目录路径（相对路径），默认为当前目录"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_file",
+        "description": "移动或重命名文件/目录",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "源文件/目录路径（相对路径）"
+            },
+            "destination": {
+              "type": "string",
+              "description": "目标文件/目录路径（相对路径）"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file_content",
+        "description": "读取指定文件的文本内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            }
+          },
+          "required": [
+            "filepath"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_file_content",
+        "description": "写入或修改文件内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            },
+            "content": {
+              "type": "string",
+              "description": "要写入的内容"
+            }
+          },
+          "required": [
+            "filepath",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "extra_body": {
+    "thinking": {
+      "type": "enabled"
+    }
+  }
+}
+--------------------
+
+[Tool Call Mode] 检测到 1 个工具调用:
+  1. move_file
+     参数: {
+  "source": "test_write.txt",
+  "destination": "test/test_write.txt"
+}
+
+请使用工具管理区域的按钮执行工具并发送结果。
+
+[Tool Execution] 执行了 1 个工具:
+  1. ✅ move_file
+     结果: {
+  "operation": "move/rename",
+  "source": "test_write.txt",
+  "destination": "test/test_write.txt",
+  "source_path": "D:\\3D\\Projects\\AI\\code\\taskchat\\test_write.txt",
+  "destination_path": "D:\\3D\\Projects\\AI\\code\\taskchat\\test\\test_write.txt",
+  "success": true,
+  "timestamp": "2026-03-18T23:50:28.781216"
+}
+
+所有工具已执行完成，请点击'发送结果'按钮将结果发送给agent。
+
+[Tool Call Mode] 发送工具结果给agent...
+{
+  "model": "deepseek-ai/DeepSeek-V3.2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "浏览当前工作目录下的文件。如有test_write.txt，读取其中的内容，将其移入test文件夹，并并在其中写入hello world"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035a2d94b2eeb983d18554078d35",
+          "type": "function",
+          "function": {
+            "name": "list_directory",
+            "arguments": "{\"path\": \".\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"current_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"target_directory\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\",\n  \"relative_path\": \".\",\n  \"files\": [\n    {\n      \"name\": \".clinerules\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T01:00:14.971838\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".git\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:20:33.111713\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \".gitignore\",\n      \"size\": 65,\n      \"modified\": \"2026-03-07T15:57:45.871022\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \".vscode\",\n      \"size\": 0,\n      \"modified\": \"2026-02-27T18:22:00.125550\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"bin\",\n      \"size\": 0,\n      \"modified\": \"2026-03-09T17:24:06.146640\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat.bat\",\n      \"size\": 254,\n      \"modified\": \"2026-02-28T12:29:47.854269\",\n      \"is_dir\": false,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"chat_gui_v2.py\",\n      \"size\": 37341,\n      \"modified\": \"2026-03-18T23:46:37.908747\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"chat_logic_v2.py\",\n      \"size\": 28803,\n      \"modified\": \"2026-03-18T23:39:50.129202\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"config.yaml\",\n      \"size\": 1690,\n      \"modified\": \"2026-03-08T17:34:53.833290\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"contexts\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-09T22:11:07.497496\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"message_models.py\",\n      \"size\": 2643,\n      \"modified\": \"2026-02-28T12:22:53.561272\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"outputs\",\n      \"size\": 0,\n      \"modified\": \"2026-02-28T11:36:44.036504\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"progress\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T22:18:58.949410\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"providers\",\n      \"size\": 4096,\n      \"modified\": \"2026-02-28T11:29:36.014327\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"README.md\",\n      \"size\": 40,\n      \"modified\": \"2026-02-28T11:19:42.985512\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"rules.md\",\n      \"size\": 2508,\n      \"modified\": \"2026-03-18T22:18:52.490439\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"simple working egs\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-08T17:29:04.431445\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"task.md\",\n      \"size\": 1283,\n      \"modified\": \"2026-03-18T22:37:06.079998\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"test\",\n      \"size\": 0,\n      \"modified\": \"2026-03-18T22:38:44.271693\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"test_write.txt\",\n      \"size\": 12,\n      \"modified\": \"2026-03-18T22:25:17.284025\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"toolcall.txt\",\n      \"size\": 15543,\n      \"modified\": \"2026-03-18T23:45:21.586188\",\n      \"is_dir\": false,\n      \"permissions\": \"666\"\n    },\n    {\n      \"name\": \"tools\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-07T15:52:29.824697\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    },\n    {\n      \"name\": \"__pycache__\",\n      \"size\": 4096,\n      \"modified\": \"2026-03-18T23:41:27.254302\",\n      \"is_dir\": true,\n      \"permissions\": \"777\"\n    }\n  ],\n  \"count\": 23,\n  \"timestamp\": \"2026-03-18T23:49:05.672555\"\n}",
+      "tool_call_id": "019d035a2d94b2eeb983d18554078d35"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035ab73140293f475cb2aac65c16",
+          "type": "function",
+          "function": {
+            "name": "read_file_content",
+            "arguments": "{\"filepath\": \"test_write.txt\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"filepath\": \"test_write.txt\",\n  \"absolute_path\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\\\\test_write.txt\",\n  \"content\": \"测试内容\",\n  \"size\": 12,\n  \"encoding\": \"utf-8\",\n  \"lines\": 1,\n  \"modified\": \"2026-03-18T22:25:17.284025\",\n  \"timestamp\": \"2026-03-18T23:49:40.853115\"\n}",
+      "tool_call_id": "019d035ab73140293f475cb2aac65c16"
+    },
+    {
+      "role": "assistant",
+      "content": "[工具调用]",
+      "tool_calls": [
+        {
+          "id": "019d035b677cc7582183d6770118d526",
+          "type": "function",
+          "function": {
+            "name": "move_file",
+            "arguments": "{\"source\": \"test_write.txt\", \"destination\": \"test/test_write.txt\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "{\n  \"operation\": \"move/rename\",\n  \"source\": \"test_write.txt\",\n  \"destination\": \"test/test_write.txt\",\n  \"source_path\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\\\\test_write.txt\",\n  \"destination_path\": \"D:\\\\3D\\\\Projects\\\\AI\\\\code\\\\taskchat\\\\test\\\\test_write.txt\",\n  \"success\": true,\n  \"timestamp\": \"2026-03-18T23:50:28.781216\"\n}",
+      "tool_call_id": "019d035b677cc7582183d6770118d526"
+    }
+  ],
+  "stream": false,
+  "temperature": 1.0,
+  "max_tokens": 4096,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "list_directory",
+        "description": "列出指定目录下的文件和文件夹",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "目录路径（相对路径），默认为当前目录"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_file",
+        "description": "移动或重命名文件/目录",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "description": "源文件/目录路径（相对路径）"
+            },
+            "destination": {
+              "type": "string",
+              "description": "目标文件/目录路径（相对路径）"
+            }
+          },
+          "required": [
+            "source",
+            "destination"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file_content",
+        "description": "读取指定文件的文本内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            }
+          },
+          "required": [
+            "filepath"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "write_file_content",
+        "description": "写入或修改文件内容",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "filepath": {
+              "type": "string",
+              "description": "文件路径（相对路径）"
+            },
+            "content": {
+              "type": "string",
+              "description": "要写入的内容"
+            }
+          },
+          "required": [
+            "filepath",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "extra_body": {
+    "thinking": {
+      "type": "enabled"
+    }
+  }
+}
+--------------------
+
+[Reasoning]
+用户
+
+Assistant: 

@@ -129,15 +129,16 @@ class ChatGUIV2:
         self.tools_frame = tk.LabelFrame(self.root, text="Tool Management", padx=10, pady=5)
         self.tools_frame.grid(row=2, column=0, padx=10, pady=(5, 5), sticky="ew")
         
-        # 工具启用状态
-        self.tools_enabled_var = tk.BooleanVar(value=True)
-        self.tools_enabled_check = tk.Checkbutton(
-            self.tools_frame,
-            text="Enable Tools",
-            variable=self.tools_enabled_var,
-            command=self.on_tools_enabled_change
-        )
-        self.tools_enabled_check.pack(side=tk.LEFT, padx=(0, 20))
+        # 工具组选择框架
+        self.tool_groups_frame = tk.Frame(self.tools_frame)
+        self.tool_groups_frame.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # 工具组标签
+        tk.Label(self.tool_groups_frame, text="Tool Groups:").pack(side=tk.LEFT)
+        
+        # 工具组选择容器
+        self.tool_groups_container = tk.Frame(self.tool_groups_frame)
+        self.tool_groups_container.pack(side=tk.LEFT, padx=(5, 0))
         
         # 工具列表标签
         tk.Label(self.tools_frame, text="Enabled Tools:").pack(side=tk.LEFT)
@@ -186,19 +187,69 @@ class ChatGUIV2:
         )
         self.cancel_tools_btn.pack(side=tk.LEFT)
         
+        # 初始化工具组选择
+        self.init_tool_groups_selection()
         # 刷新工具列表
         self.refresh_tools_list()
     
+    def init_tool_groups_selection(self):
+        """初始化工具组选择控件"""
+        # 清空现有控件
+        for widget in self.tool_groups_container.winfo_children():
+            widget.destroy()
+        
+        # 获取工具配置
+        tools_config = self.chat_logic.get_tools_config()
+        tool_groups = tools_config.get('tool_groups', {})
+        
+        # 获取当前启用的工具组
+        enabled_groups = tools_config.get('defaults', {}).get('enabled_groups', [])
+        
+        # 存储工具组变量
+        self.tool_group_vars = {}
+        
+        # 为每个工具组创建复选框
+        for group_name, group_info in tool_groups.items():
+            var = tk.BooleanVar(value=group_name in enabled_groups)
+            self.tool_group_vars[group_name] = var
+            
+            # 创建复选框
+            check = tk.Checkbutton(
+                self.tool_groups_container,
+                text=group_info.get('name', group_name),
+                variable=var,
+                command=lambda g=group_name: self.on_tool_group_change(g)
+            )
+            check.pack(side=tk.LEFT, padx=(0, 10))
+    
+    def on_tool_group_change(self, group_name):
+        """工具组选择变更处理"""
+        try:
+            # 获取当前启用的工具组
+            enabled_groups = []
+            for name, var in self.tool_group_vars.items():
+                if var.get():
+                    enabled_groups.append(name)
+            
+            # 更新逻辑层的工具组配置
+            self.chat_logic.set_enabled_tool_groups(enabled_groups)
+            
+            # 刷新工具列表显示
+            self.refresh_tools_list()
+            
+            # 更新预览
+            self.update_preview()
+            
+        except Exception as e:
+            messagebox.showerror("工具组更新错误", f"更新工具组时发生错误:\n{str(e)}")
+    
     def refresh_tools_list(self):
         """刷新工具列表显示"""
-        if self.tools_enabled_var.get():
-            enabled_tools = self.chat_logic.get_enabled_tools()
-            if enabled_tools:
-                self.tools_list_var.set(", ".join(enabled_tools))
-            else:
-                self.tools_list_var.set("No tools enabled")
+        enabled_tools = self.chat_logic.get_enabled_tools()
+        if enabled_tools:
+            self.tools_list_var.set(", ".join(enabled_tools))
         else:
-            self.tools_list_var.set("Tools disabled")
+            self.tools_list_var.set("No tools enabled")
     
     def refresh_ui_options(self):
         """根据当前提供商刷新UI选项"""
@@ -217,10 +268,6 @@ class ChatGUIV2:
         # 更新JSON支持
         json_supported = self.chat_logic.supports_feature("json_output")
         self.json_output_check.config(state="normal" if json_supported else "disabled")
-        
-        # 更新工具支持
-        tools_supported = self.chat_logic.supports_feature("tools")
-        self.tools_enabled_check.config(state="normal" if tools_supported else "disabled")
         
         # 动态创建思维链控件
         for widget in self.reasoning_container.winfo_children():
@@ -260,9 +307,6 @@ class ChatGUIV2:
              if isinstance(val, bool):
                  val = "on" if val else "off"
              self.chat_logic.set_option("reasoning", val)
-        
-        # 同步工具启用状态
-        self.on_tools_enabled_change()
     
     def create_output_area(self):
         """创建输出和预览区域"""
@@ -414,21 +458,6 @@ class ChatGUIV2:
         except ValueError:
             pass
     
-    def on_tools_enabled_change(self):
-        """工具启用状态变更处理"""
-        if self.tools_enabled_var.get():
-            # 启用工具
-            self.chat_logic.set_option("tools_enabled", True)
-            # 重新加载工具配置
-            self.chat_logic._load_tools_to_options()
-        else:
-            # 禁用工具
-            self.chat_logic.set_option("tools_enabled", False)
-            self.chat_logic.options.tools = None
-        
-        self.refresh_tools_list()
-        self.update_preview()
-    
     def log(self, message, tag=None):
         """记录消息到输出区域"""
         self.output_area.configure(state='normal')
@@ -522,10 +551,8 @@ class ChatGUIV2:
                     self.log(f"  {i}. ❌ {tool_result['function_name']}: {tool_result['error']}\n", "tool_result")
                 else:
                     self.log(f"  {i}. ✅ {tool_result['function_name']}\n", "tool_result")
-                    # 显示工具结果（截断以避免过长）
+                    # 显示工具结果
                     result_str = str(tool_result['result'])
-                    if len(result_str) > 500:
-                        result_str = result_str[:500] + "..."
                     self.log(f"     结果: {result_str}\n", "tool_result")
             
             # 检查是否所有工具都已执行
@@ -559,14 +586,32 @@ class ChatGUIV2:
                 self.log("\n[Reasoning]\n", "reasoning_header")
                 self.log(f"{reasoning_content}\n", "reasoning")
             
-            # 显示最终答案
-            self.log(f"\nAssistant: {final_answer}\n", "assistant")
-            
-            # 重置按钮状态
-            self.execute_tools_btn.config(state="disabled")
-            self.send_tool_results_btn.config(state="disabled")
-            self.cancel_tools_btn.config(state="disabled")
-            self.send_btn.config(state="normal")
+            # 检查是否再次进入工具调用模式
+            if self.chat_logic.is_in_tool_call_mode():
+                # 显示工具调用信息
+                pending_tools = self.chat_logic.get_pending_tool_calls()
+                self.log(f"\n[Tool Call Mode] 检测到 {len(pending_tools)} 个工具调用:\n", "tool_call")
+                
+                for i, tool_call in enumerate(pending_tools, 1):
+                    self.log(f"  {i}. {tool_call['function_name']}\n", "tool_call")
+                    self.log(f"     参数: {json.dumps(tool_call['arguments'], indent=2, ensure_ascii=False)}\n", "tool_call")
+                
+                self.log("\n请使用工具管理区域的按钮执行工具并发送结果。\n", "tool_call")
+                
+                # 更新按钮状态
+                self.execute_tools_btn.config(state="normal")
+                self.send_tool_results_btn.config(state="disabled")
+                self.cancel_tools_btn.config(state="normal")
+                self.send_btn.config(state="disabled")
+            else:
+                # 显示最终答案
+                self.log(f"\nAssistant: {final_answer}\n", "assistant")
+                
+                # 重置按钮状态
+                self.execute_tools_btn.config(state="disabled")
+                self.send_tool_results_btn.config(state="disabled")
+                self.cancel_tools_btn.config(state="disabled")
+                self.send_btn.config(state="normal")
             
         except Exception as e:
             messagebox.showerror("发送工具结果错误", f"发送工具结果时发生错误:\n{str(e)}")
@@ -752,6 +797,8 @@ class ChatGUIV2:
                                             first_part = msg.content[0]
                                             if hasattr(first_part, 'content'):
                                                 content_preview = str(first_part.content)
+                                            elif isinstance(first_part, dict) and 'content' in first_part:
+                                                content_preview = str(first_part['content'])
                                             else:
                                                 content_preview = str(first_part)
                                         else:

@@ -171,26 +171,58 @@ class ToolRegistry:
 # 创建全局工具注册表实例
 _tool_registry = ToolRegistry()
 
-def list_directory() -> str:
+def list_directory(path: str = ".") -> str:
     """
-    列出当前目录下的文件和文件夹
+    列出指定目录下的文件和文件夹
     
+    Args:
+        path: 目录路径（相对路径），默认为当前目录
+        
     Returns:
         JSON字符串格式的文件列表
     """
     try:
-        files = os.listdir('.')
+        # 安全验证：确保路径在当前工作目录内
+        current_dir = os.path.abspath('.')
+        target_path = os.path.abspath(os.path.join(current_dir, path))
+        
+        # 检查路径是否在当前工作目录内
+        if not target_path.startswith(current_dir):
+            return json.dumps({
+                "error": f"访问路径超出允许范围: {path}",
+                "allowed_directory": current_dir,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查路径是否存在
+        if not os.path.exists(target_path):
+            return json.dumps({
+                "error": f"路径不存在: {path}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查是否为目录
+        if not os.path.isdir(target_path):
+            return json.dumps({
+                "error": f"路径不是目录: {path}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 列出目录内容
+        files = os.listdir(target_path)
+        
         # 获取文件信息
         file_details = []
         for file in files:
-            file_path = os.path.join('.', file)
+            file_path = os.path.join(target_path, file)
             try:
                 stat = os.stat(file_path)
                 file_details.append({
                     "name": file,
                     "size": stat.st_size,
                     "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    "is_dir": os.path.isdir(file_path)
+                    "is_dir": os.path.isdir(file_path),
+                    "permissions": oct(stat.st_mode)[-3:] if hasattr(stat, 'st_mode') else "unknown"
                 })
             except Exception as e:
                 file_details.append({
@@ -199,7 +231,9 @@ def list_directory() -> str:
                 })
         
         result = {
-            "current_directory": os.path.abspath('.'),
+            "current_directory": current_dir,
+            "target_directory": target_path,
+            "relative_path": path,
             "files": file_details,
             "count": len(files),
             "timestamp": datetime.datetime.now().isoformat()
@@ -226,58 +260,6 @@ def get_current_time() -> str:
         "week_number": now.isocalendar()[1]
     }
     return json.dumps(result, ensure_ascii=False, indent=2)
-
-def calculate(expression: str) -> str:
-    """
-    计算数学表达式
-    
-    Args:
-        expression: 数学表达式字符串
-        
-    Returns:
-        JSON字符串格式的计算结果
-    """
-    try:
-        # 安全检查：只允许数字、运算符、括号和空格
-        allowed_chars = set('0123456789+-*/(). ')
-        if not all(c in allowed_chars for c in expression):
-            return json.dumps({
-                "error": "表达式包含不安全字符",
-                "allowed_chars": "数字、+、-、*、/、(、)、. 和空格",
-                "expression": expression
-            })
-        
-        # 移除多余空格
-        expression = expression.strip()
-        
-        # 安全检查：防止除零错误
-        if '/0' in expression.replace(' ', ''):
-            return json.dumps({
-                "error": "表达式包含除以零",
-                "expression": expression
-            })
-        
-        # 计算表达式
-        result = eval(expression)
-        
-        return json.dumps({
-            "expression": expression,
-            "result": result,
-            "type": type(result).__name__,
-            "timestamp": datetime.datetime.now().isoformat()
-        }, ensure_ascii=False, indent=2)
-    except ZeroDivisionError:
-        return json.dumps({
-            "error": "除以零错误",
-            "expression": expression,
-            "timestamp": datetime.datetime.now().isoformat()
-        })
-    except Exception as e:
-        return json.dumps({
-            "error": str(e),
-            "expression": expression,
-            "timestamp": datetime.datetime.now().isoformat()
-        })
 
 def ping(host: str) -> str:
     """
@@ -341,6 +323,227 @@ def ping(host: str) -> str:
             "timestamp": datetime.datetime.now().isoformat()
         })
 
+
+def move_file(source: str, destination: str) -> str:
+    """
+    移动或重命名文件/目录
+    
+    Args:
+        source: 源文件/目录路径（相对路径）
+        destination: 目标文件/目录路径（相对路径）
+        
+    Returns:
+        JSON字符串格式的操作结果
+    """
+    try:
+        # 安全验证：确保路径在当前工作目录内
+        current_dir = os.path.abspath('.')
+        source_path = os.path.abspath(os.path.join(current_dir, source))
+        dest_path = os.path.abspath(os.path.join(current_dir, destination))
+        
+        # 检查路径是否在当前工作目录内
+        if not source_path.startswith(current_dir):
+            return json.dumps({
+                "error": f"源路径超出允许范围: {source}",
+                "allowed_directory": current_dir,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        if not dest_path.startswith(current_dir):
+            return json.dumps({
+                "error": f"目标路径超出允许范围: {destination}",
+                "allowed_directory": current_dir,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查源文件/目录是否存在
+        if not os.path.exists(source_path):
+            return json.dumps({
+                "error": f"源文件/目录不存在: {source}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查目标路径是否已存在
+        if os.path.exists(dest_path):
+            return json.dumps({
+                "error": f"目标路径已存在: {destination}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 执行移动/重命名操作
+        os.rename(source_path, dest_path)
+        
+        result = {
+            "operation": "move/rename",
+            "source": source,
+            "destination": destination,
+            "source_path": source_path,
+            "destination_path": dest_path,
+            "success": True,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": f"移动文件失败: {str(e)}",
+            "source": source,
+            "destination": destination,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+
+
+def read_file_content(filepath: str) -> str:
+    """
+    读取指定文件的文本内容
+    
+    Args:
+        filepath: 文件路径（相对路径）
+        
+    Returns:
+        JSON字符串格式的文件内容
+    """
+    try:
+        # 安全验证：确保路径在当前工作目录内
+        current_dir = os.path.abspath('.')
+        abs_filepath = os.path.abspath(os.path.join(current_dir, filepath))
+        
+        # 检查路径是否在当前工作目录内
+        if not abs_filepath.startswith(current_dir):
+            return json.dumps({
+                "error": f"文件路径超出允许范围: {filepath}",
+                "allowed_directory": current_dir,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查文件是否存在
+        if not os.path.exists(abs_filepath):
+            return json.dumps({
+                "error": f"文件不存在: {filepath}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查是否为文件
+        if not os.path.isfile(abs_filepath):
+            return json.dumps({
+                "error": f"路径不是文件: {filepath}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查文件大小（限制读取大文件）
+        file_size = os.path.getsize(abs_filepath)
+        MAX_FILE_SIZE = 1024 * 1024  # 1MB限制
+        
+        if file_size > MAX_FILE_SIZE:
+            return json.dumps({
+                "error": f"文件过大: {file_size}字节 > {MAX_FILE_SIZE}字节限制",
+                "filepath": filepath,
+                "file_size": file_size,
+                "max_allowed": MAX_FILE_SIZE,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 读取文件内容
+        with open(abs_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 获取文件信息
+        stat = os.stat(abs_filepath)
+        
+        result = {
+            "filepath": filepath,
+            "absolute_path": abs_filepath,
+            "content": content,
+            "size": file_size,
+            "encoding": "utf-8",
+            "lines": len(content.splitlines()),
+            "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except UnicodeDecodeError:
+        return json.dumps({
+            "error": f"文件不是UTF-8文本格式: {filepath}",
+            "filepath": filepath,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+    except Exception as e:
+        return json.dumps({
+            "error": f"读取文件失败: {str(e)}",
+            "filepath": filepath,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+
+
+def write_file_content(filepath: str, content: str) -> str:
+    """
+    写入或修改文件内容
+    
+    Args:
+        filepath: 文件路径（相对路径）
+        content: 要写入的内容
+        
+    Returns:
+        JSON字符串格式的操作结果
+    """
+    try:
+        # 安全验证：确保路径在当前工作目录内
+        current_dir = os.path.abspath('.')
+        abs_filepath = os.path.abspath(os.path.join(current_dir, filepath))
+        
+        # 检查路径是否在当前工作目录内
+        if not abs_filepath.startswith(current_dir):
+            return json.dumps({
+                "error": f"文件路径超出允许范围: {filepath}",
+                "allowed_directory": current_dir,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查是否为目录（如果路径已存在）
+        if os.path.exists(abs_filepath) and os.path.isdir(abs_filepath):
+            return json.dumps({
+                "error": f"路径是目录，不是文件: {filepath}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 检查父目录是否存在
+        parent_dir = os.path.dirname(abs_filepath)
+        if not os.path.exists(parent_dir):
+            return json.dumps({
+                "error": f"父目录不存在: {os.path.dirname(filepath)}",
+                "timestamp": datetime.datetime.now().isoformat()
+            })
+        
+        # 写入文件内容
+        with open(abs_filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        # 获取文件信息
+        file_size = len(content.encode('utf-8'))
+        
+        # 检查文件是否为新创建
+        file_existed = os.path.exists(abs_filepath)
+        
+        result = {
+            "operation": "write",
+            "filepath": filepath,
+            "absolute_path": abs_filepath,
+            "content_length": len(content),
+            "size_bytes": file_size,
+            "lines": len(content.splitlines()),
+            "created": not file_existed,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": f"写入文件失败: {str(e)}",
+            "filepath": filepath,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+
 def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
     执行指定工具（重构版本，使用动态工具分发器）
@@ -358,8 +561,10 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
 # 注册工具函数（在模块加载时自动执行）
 _tool_registry.register("list_directory", list_directory)
 _tool_registry.register("get_current_time", get_current_time)
-_tool_registry.register("calculate", calculate)
 _tool_registry.register("ping", ping)
+_tool_registry.register("move_file", move_file)
+_tool_registry.register("read_file_content", read_file_content)
+_tool_registry.register("write_file_content", write_file_content)
 
 
 def get_tool_registry() -> ToolRegistry:
@@ -412,7 +617,7 @@ def load_tools_config(config_path: str = "tools.yaml") -> Dict[str, Any]:
         # 返回默认配置
         return {
             "error": f"加载配置文件失败: {str(e)}",
-            "default_tools": ["list_directory", "get_current_time", "calculate"]
+            "default_tools": ["list_directory", "get_current_time", "ping"]
         }
 
 if __name__ == "__main__":
@@ -433,28 +638,23 @@ if __name__ == "__main__":
     result = execute_tool("get_current_time", {})
     print(result)
     
-    # 测试calculate
-    print("\n4. 测试calculate:")
-    result = execute_tool("calculate", {"expression": "2+3*4"})
-    print(result)
-    
     # 测试ping
-    print("\n5. 测试ping:")
+    print("\n4. 测试ping:")
     result = execute_tool("ping", {"host": "localhost"})
     print(result[:300] + "..." if len(result) > 300 else result)
     
     # 测试参数验证
-    print("\n6. 测试参数验证:")
-    result = execute_tool("calculate", {"wrong_param": "test"})
+    print("\n5. 测试参数验证:")
+    result = execute_tool("list_directory", {"wrong_param": "test"})
     print(result)
     
     # 测试未知工具
-    print("\n7. 测试未知工具:")
+    print("\n6. 测试未知工具:")
     result = execute_tool("unknown_tool", {})
     print(result)
     
     # 测试新API函数
-    print("\n8. 测试新API函数:")
+    print("\n7. 测试新API函数:")
     print(f"可用工具列表: {list_available_tools()}")
     
     print("\n=== 测试完成 ===")

@@ -7,30 +7,69 @@ tools:
   # 文件系统工具
   list_directory:
     name: "list_directory"
-    description: "列出当前目录下的文件和文件夹"
+    description: "列出指定目录下的文件和文件夹"
     parameters:
       type: "object"
-      properties: {}
+      properties:
+        path:
+          type: "string"
+          description: "目录路径（相对路径），默认为当前目录"
       required: []
       additionalProperties: false
     implementation: "system"
     category: "filesystem"
 
-  # 计算器工具
-  calculate:
-    name: "calculate"
-    description: "计算数学表达式"
+  # 文件移动工具
+  move_file:
+    name: "move_file"
+    description: "移动或重命名文件/目录"
     parameters:
       type: "object"
       properties:
-        expression:
+        source:
           type: "string"
-          description: "数学表达式，例如：2+3*4"
-      required: ["expression"]
+          description: "源文件/目录路径（相对路径）"
+        destination:
+          type: "string"
+          description: "目标文件/目录路径（相对路径）"
+      required: ["source", "destination"]
       additionalProperties: false
     implementation: "system"
-    category: "utility"
-  
+    category: "filesystem"
+
+  # 文件读取工具
+  read_file_content:
+    name: "read_file_content"
+    description: "读取指定文件的文本内容"
+    parameters:
+      type: "object"
+      properties:
+        filepath:
+          type: "string"
+          description: "文件路径（相对路径）"
+      required: ["filepath"]
+      additionalProperties: false
+    implementation: "system"
+    category: "filesystem"
+
+  # 文件写入工具
+  write_file_content:
+    name: "write_file_content"
+    description: "写入或修改文件内容"
+    parameters:
+      type: "object"
+      properties:
+        filepath:
+          type: "string"
+          description: "文件路径（相对路径）"
+        content:
+          type: "string"
+          description: "要写入的内容"
+      required: ["filepath", "content"]
+      additionalProperties: false
+    implementation: "system"
+    category: "filesystem"
+
   # 时间工具
   get_current_time:
     name: "get_current_time"
@@ -63,12 +102,17 @@ tool_groups:
   basic:
     name: "基础工具"
     description: "常用基础工具"
-    tools: ["list_directory", "get_current_time", "calculate", "ping"]
+    tools: ["list_directory", "get_current_time", "ping"]
+  
+  filesystem:
+    name: "文件系统工具"
+    description: "文件操作相关工具"
+    tools: ["list_directory", "move_file", "read_file_content", "write_file_content"]
 
 # 默认工具配置
 defaults:
   # 默认启用的工具组
-  enabled_groups: ["basic"]
+  enabled_groups: ["basic", "filesystem"]
   
   # 默认启用的单个工具
   enabled_tools: []
@@ -90,5 +134,7 @@ implementations:
   system:
     list_directory: "tools_impl.list_directory"
     get_current_time: "tools_impl.get_current_time"
-    calculate: "tools_impl.calculate"
     ping: "tools_impl.ping"
+    move_file: "tools_impl.move_file"
+    read_file_content: "tools_impl.read_file_content"
+    write_file_content: "tools_impl.write_file_content"

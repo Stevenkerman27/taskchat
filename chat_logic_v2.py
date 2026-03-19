@@ -17,7 +17,9 @@ class ChatLogicV2:
         self.raw_config = self._load_config()
         self.providers_configs: Dict[str, ProviderConfig] = self._parse_provider_configs()
         self.current_strategy = None
-        self.messages: List[InternalMessage] = []
+        self.messages: List[InternalMessage] = [
+            create_text_message("system", "你是一个强大的AI代码助手。当用户提出需要多步操作的任务时，请自主规划步骤并连续调用工具直到任务完全完成。不要在任务中途停止。如果前一个工具调用成功，请继续调用下一个工具，直到达到最终目标。")
+        ]
         self.options = ChatOptions()
         self.tools_config = self._load_tools_config()
         self._init_strategy()
@@ -237,17 +239,19 @@ class ChatLogicV2:
             error_msg = f"Error: {str(e)}"
             return error_msg, None, payload
     
-    def _handle_tool_calls(self, user_input: str, tool_calls: List[Any], original_payload: Dict[str, Any]) -> Tuple[str, Optional[str], Dict[str, Any]]:
+    def _handle_tool_calls(self, user_input: Optional[str], tool_calls: List[Any], original_payload: Dict[str, Any]) -> Tuple[str, Optional[str], Dict[str, Any]]:
         """处理工具调用 - 现在只准备工具调用，不自动执行"""
         try:
             # 保存状态用于手动工具调用
-            self.last_user_input = user_input
+            if user_input is not None:
+                self.last_user_input = user_input
             self.last_payload = original_payload
             self.tool_call_mode = True
             self.pending_tool_calls = []
             
             # 添加用户消息到上下文
-            self.add_message("user", user_input)
+            if user_input is not None:
+                self.add_message("user", user_input)
             
             # 创建包含tool_calls的助手消息
             assistant_message = self._create_assistant_message_with_tool_calls(tool_calls)
@@ -282,26 +286,38 @@ class ChatLogicV2:
                     function_name = tool_call["function_name"]
                     arguments = tool_call["arguments"]
                     
-                    # 执行工具
-                    tool_result = execute_tool(function_name, arguments)
-                    
-                    # 更新工具调用状态
-                    tool_call["executed"] = True
-                    tool_call["result"] = tool_result
-                    
-                    # 添加工具结果消息到上下文
-                    self.add_message("tool", tool_result, tool_call_id=tool_call["id"])
-                    
-                    executed_tools.append({
-                        "function_name": function_name,
-                        "arguments": arguments,
-                        "result": tool_result
-                    })
+                    try:
+                        # 执行工具
+                        tool_result = execute_tool(function_name, arguments)
+                        
+                        # 更新工具调用状态
+                        tool_call["executed"] = True
+                        tool_call["result"] = tool_result
+                        
+                        # 添加工具结果消息到上下文
+                        self.add_message("tool", tool_result, tool_call_id=tool_call["id"])
+                        
+                        executed_tools.append({
+                            "function_name": function_name,
+                            "arguments": arguments,
+                            "result": tool_result
+                        })
+                    except Exception as tool_e:
+                        error_msg = f"执行异常: {str(tool_e)}"
+                        tool_call["executed"] = True
+                        tool_call["result"] = error_msg
+                        self.add_message("tool", error_msg, tool_call_id=tool_call["id"])
+                        
+                        executed_tools.append({
+                            "function_name": function_name,
+                            "arguments": arguments,
+                            "error": error_msg
+                        })
             
             return executed_tools
             
         except Exception as e:
-            return [{"error": f"工具执行失败: {str(e)}"}]
+            return [{"function_name": "系统", "error": f"工具执行环境失败: {str(e)}"}]
     
     def send_tool_results_to_agent(self) -> Tuple[str, Optional[str], Dict[str, Any]]:
         """将工具结果发送给agent获取最终答案"""
@@ -313,16 +329,29 @@ class ChatLogicV2:
             # 构建包含工具结果的payload进行第二轮调用
             formatted_messages = self.current_strategy.format_messages(self.messages)
             
-            # 构建新的payload（不包含工具定义，因为已经调用过了）
+            # 构建新的payload
             new_payload = self.last_payload.copy()
             new_payload["messages"] = formatted_messages
-            if "tools" in new_payload:
-                del new_payload["tools"]  # 移除工具定义，避免重复调用
             
             # 调用API获取最终答案
             response = self.current_strategy.call_api(new_payload)
             final_answer, reasoning_content = self.current_strategy.parse_response(response)
             
+            # 检查是否有新的工具调用
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                choice = response.choices[0]
+                if hasattr(choice, 'message') and hasattr(choice.message, 'tool_calls'):
+                    tool_calls = choice.message.tool_calls
+                    if tool_calls:
+                        # 处理新的工具调用，不传入user_input避免重复添加
+                        return self._handle_tool_calls(None, tool_calls, new_payload)
+            
+            # 如果没有工具调用且返回了系统警告（因为模型截断），保留工具模式状态，避免默默退出
+            if final_answer and "[系统警告" in final_answer:
+                # 依然添加助手消息
+                self.add_message("assistant", final_answer)
+                return final_answer, reasoning_content, new_payload
+
             # 添加最终助手消息
             self.add_message("assistant", final_answer)
             
@@ -353,11 +382,16 @@ class ChatLogicV2:
         self.last_user_input = ""
         self.last_payload = {}
         
-        # 移除最后一条助手消息（工具调用消息）
-        if self.messages and self.messages[-1].role == "assistant":
-            self.messages.pop()
-        # 移除最后一条用户消息
-        if self.messages and self.messages[-1].role == "user":
+        # 回退上下文，撤销由于未完成的工具调用链引发的所有消息
+        while self.messages:
+            last_msg = self.messages[-1]
+            if last_msg.role == "assistant":
+                metadata = last_msg.metadata or {}
+                if "tool_calls" not in metadata:
+                    break
+            elif last_msg.role == "system":
+                break
+            
             self.messages.pop()
     
     def _create_assistant_message_with_tool_calls(self, tool_calls: List[Any]) -> InternalMessage:
@@ -365,7 +399,7 @@ class ChatLogicV2:
         from message_models import InternalMessage, MessagePart
         
         # 创建消息内容
-        content = [MessagePart(type="text", content="[工具调用]")]
+        content = [MessagePart(type="text", content="")]
         
         # 创建消息
         message = InternalMessage(
@@ -430,6 +464,23 @@ class ChatLogicV2:
         
         return list(set(enabled_tools))  # 去重
     
+    def set_enabled_tool_groups(self, enabled_groups: List[str]) -> None:
+        """
+        设置启用的工具组
+        
+        Args:
+            enabled_groups: 要启用的工具组名称列表
+        """
+        if not self.tools_config:
+            return
+        
+        # 更新配置中的默认工具组
+        defaults = self.tools_config.get('defaults', {})
+        defaults['enabled_groups'] = enabled_groups
+        
+        # 重新加载工具配置到选项
+        self._load_tools_to_options()
+    
     def _ensure_contexts_dir(self):
         """确保contexts目录存在"""
         if not os.path.exists(self.contexts_dir):
@@ -437,10 +488,10 @@ class ChatLogicV2:
     
     def is_in_reasoning_mode(self) -> bool:
         """
-        检查是否处于思维链模式
+        检查是否处于思维链或工具调用等不完整的中间状态
         
         Returns:
-            bool: 如果处于思维链中间则返回True
+            bool: 如果处于不完整状态则返回True
         """
         # 检查是否处于工具调用模式
         if self.tool_call_mode:
@@ -449,14 +500,6 @@ class ChatLogicV2:
         # 检查是否有未完成的工具调用
         if self.pending_tool_calls and not all(tool_call["executed"] for tool_call in self.pending_tool_calls):
             return True
-        
-        # 检查最后一条消息是否是助手消息且包含思维链内容
-        if self.messages:
-            last_message = self.messages[-1]
-            if last_message.role == "assistant":
-                # 检查是否有思维链相关的元数据
-                if last_message.metadata and "reasoning" in last_message.metadata:
-                    return True
         
         return False
     
