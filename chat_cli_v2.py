@@ -277,21 +277,66 @@ Available Commands:
         elif line.startswith("/chat "):
             msg = line[6:].strip()
             self.do_chat(msg)
-        elif line.startswith("/provider "):
-            parts = line[10:].strip().split()
-            if parts:
-                provider = parts[0]
-                model = parts[1] if len(parts) > 1 else None
-                try:
-                    self.logic.set_provider(provider, model)
-                    self.emit("sys", f"Switched to {provider} - {self.logic.get_current_model()}")
-                    self.emit_state()
-                except Exception as e:
-                    self.emit("error", {"message": str(e)})
-        elif line.startswith("/option "):
-            parts = line[8:].strip().split(maxsplit=1)
+        elif line.startswith("/provider"):
+            args_str = line[9:].strip()
+            available = self.logic.get_available_providers()
+            
+            if not args_str:
+                # 查询模式
+                self.emit("sys", "Available Providers:")
+                for i, p in enumerate(available, 1):
+                    status = "[ACTIVE]" if p['is_current'] else ""
+                    self.emit("sys", f"  {i}. {p['id']} ({p['name']}) {status}")
+                    self.emit("sys", f"     Models: {', '.join(p['models'])}")
+                self.emit("sys", "Use '/provider <name_or_index> [model]' to switch.")
+                return
+
+            parts = args_str.split()
+            provider_input = parts[0]
+            model = parts[1] if len(parts) > 1 else None
+            
+            # 处理数字索引
+            if provider_input.isdigit():
+                idx = int(provider_input) - 1
+                if 0 <= idx < len(available):
+                    provider_input = available[idx]['id']
+                else:
+                    self.emit("error", {"message": f"Invalid provider index: {idx+1}"})
+                    return
+
+            try:
+                self.logic.set_provider(provider_input, model)
+                self.emit("sys", f"Switched to {provider_input} - {self.logic.get_current_model()}")
+                self.emit_state()
+            except Exception as e:
+                self.emit("error", {"message": str(e)})
+
+        elif line.startswith("/option"):
+            args_str = line[7:].strip()
+            current_options = self.logic.get_current_options_dict()
+            
+            if not args_str:
+                # 查询模式
+                self.emit("sys", "Current Chat Options:")
+                for i, (k, v) in enumerate(current_options.items(), 1):
+                    self.emit("sys", f"  {i}. {k} = {v}")
+                self.emit("sys", "Use '/option <key_or_index> <value>' to set.")
+                return
+
+            parts = args_str.split(maxsplit=1)
             if len(parts) == 2:
-                key, val_str = parts
+                key_input, val_str = parts
+                
+                # 处理数字索引
+                if key_input.isdigit():
+                    idx = int(key_input) - 1
+                    keys = list(current_options.keys())
+                    if 0 <= idx < len(keys):
+                        key_input = keys[idx]
+                    else:
+                        self.emit("error", {"message": f"Invalid option index: {idx+1}"})
+                        return
+
                 try:
                     if val_str.lower() == "true": val = True
                     elif val_str.lower() == "false": val = False
@@ -303,15 +348,45 @@ Available Commands:
                                 val = float(val_str)
                             except ValueError:
                                 val = val_str
-                    self.logic.set_option(key, val)
-                    self.emit("sys", f"Set option {key} = {val}")
+                    self.logic.set_option(key_input, val)
+                    self.emit("sys", f"Set option {key_input} = {val}")
                     self.emit_state()
                 except Exception as e:
                     self.emit("error", {"message": str(e)})
-        elif line.startswith("/tools "):
-            groups = line[7:].strip().split(",")
-            groups = [g.strip() for g in groups if g.strip()]
-            self.logic.set_enabled_tool_groups(groups)
+            else:
+                self.emit("sys", "Usage: /option <key_or_index> <value>")
+
+        elif line.startswith("/tools"):
+            args_str = line[6:].strip()
+            tool_info = self.logic.get_available_tool_groups()
+            all_groups = list(tool_info['groups'].keys())
+            
+            if not args_str:
+                # 查询模式
+                self.emit("sys", "Available Tool Groups:")
+                for i, group_name in enumerate(all_groups, 1):
+                    status = "[ACTIVE]" if group_name in tool_info['enabled'] else ""
+                    tools = tool_info['groups'][group_name].get('tools', [])
+                    desc = tool_info['groups'][group_name].get('description', '')
+                    self.emit("sys", f"  {i}. {group_name} ({desc}) {status}")
+                    self.emit("sys", f"     Tools: {', '.join(tools)}")
+                self.emit("sys", "Use '/tools <name_or_index1,index2...>' to enable.")
+                return
+
+            # 处理输入（支持逗号分隔的名字或索引）
+            inputs = [i.strip() for i in args_str.split(",") if i.strip()]
+            final_groups = []
+            for item in inputs:
+                if item.isdigit():
+                    idx = int(item) - 1
+                    if 0 <= idx < len(all_groups):
+                        final_groups.append(all_groups[idx])
+                    else:
+                        self.emit("error", {"message": f"Invalid tool group index: {idx+1}"})
+                else:
+                    final_groups.append(item)
+            
+            self.logic.set_enabled_tool_groups(final_groups)
             enabled_tools = self.logic.get_enabled_tools()
             self.emit("sys", f"Enabled tool groups updated. Active tools: {', '.join(enabled_tools) if enabled_tools else 'None'}")
             self.emit_state()

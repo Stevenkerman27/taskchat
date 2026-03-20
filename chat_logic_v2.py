@@ -467,7 +467,7 @@ class ChatLogicV2:
         # 添加单独启用的工具
         enabled_tools.extend(enabled_tools_list)
         
-        return list(set(enabled_tools))  # 去重
+        return sorted(list(set(enabled_tools)))  # 去重并排序，确保确定性顺序（利于缓存命中）
     
     def set_enabled_tool_groups(self, enabled_groups: List[str]) -> None:
         """
@@ -486,6 +486,40 @@ class ChatLogicV2:
         # 重新加载工具配置到选项
         self._load_tools_to_options()
     
+    def get_available_providers(self) -> List[Dict[str, Any]]:
+        """获取所有可用的提供商和模型"""
+        providers_info = []
+        for name, config in self.providers_configs.items():
+            providers_info.append({
+                "id": name,
+                "name": config.name,
+                "models": config.models,
+                "default_model": config.default_model,
+                "is_current": name == self.current_provider_name
+            })
+        return providers_info
+
+    def get_available_tool_groups(self) -> Dict[str, Any]:
+        """获取所有可用的工具组和当前状态"""
+        if not self.tools_config:
+            return {"groups": {}, "enabled": []}
+        
+        groups = self.tools_config.get('tool_groups', {})
+        enabled = self.tools_config.get('defaults', {}).get('enabled_groups', [])
+        return {"groups": groups, "enabled": enabled}
+
+    def get_current_options_dict(self) -> Dict[str, Any]:
+        """获取当前配置项的字典表示（排除复杂对象）"""
+        return {
+            "temperature": self.options.temperature,
+            "max_tokens": self.options.max_tokens,
+            "top_p": self.options.top_p,
+            "stream": self.options.stream,
+            "json_output": self.options.json_output,
+            "reasoning": self.options.reasoning,
+            "provider_specific": self.options.provider_specific
+        }
+
     def _ensure_contexts_dir(self):
         """确保contexts目录存在"""
         if not os.path.exists(self.contexts_dir):
