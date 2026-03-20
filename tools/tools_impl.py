@@ -558,13 +558,18 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     return _tool_registry.execute(tool_name, arguments)
 
 
+def get_time() -> str:
+    """获取当前日期和时间 (别名)"""
+    return get_current_time()
+
 # 注册工具函数（在模块加载时自动执行）
-_tool_registry.register("list_directory", list_directory)
+_tool_registry.register("ls", list_directory)
 _tool_registry.register("get_current_time", get_current_time)
+_tool_registry.register("get_time", get_time)
 _tool_registry.register("ping", ping)
 _tool_registry.register("move_file", move_file)
-_tool_registry.register("read_file_content", read_file_content)
-_tool_registry.register("write_file_content", write_file_content)
+_tool_registry.register("read_file", read_file_content)
+_tool_registry.register("write_file", write_file_content)
 
 
 def get_tool_registry() -> ToolRegistry:
@@ -630,7 +635,7 @@ if __name__ == "__main__":
     
     # 测试list_directory
     print("\n2. 测试list_directory:")
-    result = execute_tool("list_directory", {})
+    result = execute_tool("ls", {})
     print(result[:200] + "..." if len(result) > 200 else result)
     
     # 测试get_current_time
@@ -645,7 +650,7 @@ if __name__ == "__main__":
     
     # 测试参数验证
     print("\n5. 测试参数验证:")
-    result = execute_tool("list_directory", {"wrong_param": "test"})
+    result = execute_tool("ls", {"wrong_param": "test"})
     print(result)
     
     # 测试未知工具

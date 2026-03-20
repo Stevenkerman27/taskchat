@@ -1,7 +1,8 @@
+Chinese character involved in this project, mind encoding!
+使用myml python环境,位于D:\Software\anaconda\envs\myml
 我需要你帮助我开发agent程序。主文件为chat_logic_v2.py和chat_gui_v2.py
-使用myml python环境,禁止修改此文件
 使用API前，调用context7 MCP查询文档
-阅读task.md, 完成最新一条未完成的任务
+阅读task.md, 完成最新一条未完成的任务。理解任务后先与用户讨论想法, must ensure alignment before start editing
 mistakes部分中记录了过去常犯的错误，必须阅读保证不再犯错。如果有新的frequent mistake同样记录在mistakes部分中
 
 开发规则：
@@ -26,7 +27,8 @@ mistakes部分中记录了过去常犯的错误，必须阅读保证不再犯错
 5. 在任务完成后，将task.md中完成的任务标注为已完成，禁止修改其他内容。在 progress 文件夹中记录开发进展。拒绝低信息密度的描述，请按以下维度重点记录：
     决策意图: 不要只列出修改了哪个函数，说明为什么要采用这种实现方式，解决了什么核心冲突。
     防御性记录: 是否尝试过其他方案但失败了？记录下那些“不可行”的路径，防止未来重蹈覆辙。
-    验证依据: 简述测试覆盖的核心边界情况，而非仅仅标注“测试通过”。
+    验证依据: 简述测试覆盖的核心边界情况，而非仅仅标注“测试通过”
+    如果是对GUI小修小补等对代码结构无影响就不需要记录了
 
 mistakes:
 1. 当在CLI执行 Python 代码块时，必须遵循以下原则：不要在 f-string 中使用引号嵌套；禁止在 {} 内出现反斜杠；严格引号分层。禁止在 f-string 的大括号内使用任何引号或反斜杠。如果需要打印字典内容，使用 print('text', dict['key']) 这种多参数形式，不要在字符串内部嵌套转义引号

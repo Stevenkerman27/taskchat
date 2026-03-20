@@ -12,9 +12,9 @@ tools:
       type: "object"
       properties:
         path:
-          type: "string"
+          type: ["string", "null"]
           description: "目录路径（相对路径），默认为当前目录"
-      required: []
+      required: ["path"]
       additionalProperties: false
     implementation: "system"
     category: "filesystem"

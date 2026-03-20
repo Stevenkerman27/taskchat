@@ -90,8 +90,18 @@ class ChatLogicV2:
         enabled_groups = self.tools_config.get('defaults', {}).get('enabled_groups', [])
         enabled_tools = self.tools_config.get('defaults', {}).get('enabled_tools', [])
         
-        # 收集所有启用的工具
-        all_tools = []
+        # 收集所有启用的工具，使用集合去重
+        all_tools_defs = []
+        added_tool_names = set()
+        
+        def add_tool_by_name(tool_name):
+            if tool_name in added_tool_names:
+                return
+            if tool_name in self.tools_config.get('tools', {}):
+                tool_def = self._create_tool_definition(tool_name)
+                if tool_def:
+                    all_tools_defs.append(tool_def)
+                    added_tool_names.add(tool_name)
         
         # 从工具组添加工具
         tool_groups = self.tools_config.get('tool_groups', {})
@@ -99,21 +109,14 @@ class ChatLogicV2:
             if group_name in tool_groups:
                 group_tools = tool_groups[group_name].get('tools', [])
                 for tool_name in group_tools:
-                    if tool_name in self.tools_config.get('tools', {}):
-                        tool_def = self._create_tool_definition(tool_name)
-                        if tool_def:
-                            all_tools.append(tool_def)
+                    add_tool_by_name(tool_name)
         
         # 添加单独启用的工具
         for tool_name in enabled_tools:
-            if tool_name in self.tools_config.get('tools', {}):
-                tool_def = self._create_tool_definition(tool_name)
-                if tool_def:
-                    all_tools.append(tool_def)
+            add_tool_by_name(tool_name)
         
         # 设置工具选项
-        if all_tools:
-            self.options.tools = all_tools
+        self.options.tools = all_tools_defs if all_tools_defs else None
     
     def _create_tool_definition(self, tool_name: str) -> Optional[Dict[str, Any]]:
         """创建工具定义，遵循DeepSeek strict模式JSON Schema格式要求"""
