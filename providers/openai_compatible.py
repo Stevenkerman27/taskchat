@@ -80,6 +80,14 @@ class OpenAICompatibleStrategy(ProviderStrategy):
                     if not formatted_msg["content"]:
                         formatted_msg["content"] = None
             
+            # 处理 reasoning_content，适配 Kimi 等要求
+            if msg.role == "assistant":
+                if "reasoning_content" in msg.metadata:
+                    formatted_msg["reasoning_content"] = msg.metadata["reasoning_content"]
+                elif "tool_calls" in msg.metadata:
+                    # Kimi 要求有 tool_calls 时（且开启了 thinking）必须有 reasoning_content
+                    formatted_msg["reasoning_content"] = ""
+            
             formatted.append(formatted_msg)
         return formatted
     
@@ -144,9 +152,7 @@ class OpenAICompatibleStrategy(ProviderStrategy):
                 # 提取思维链内容（如果存在）
                 # 注意：当不开启思维链时，reasoning_content属性可能不存在
                 if hasattr(message, 'reasoning_content'):
-                    if message.reasoning_content:
-                        reasoning_content = message.reasoning_content
-                    # 如果reasoning_content存在但为空，保持None
+                    reasoning_content = message.reasoning_content
                 
                 # 提取最终答案
                 if hasattr(message, 'content') and message.content:

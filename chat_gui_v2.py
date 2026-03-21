@@ -116,25 +116,21 @@ class ChatGUIV2:
 
     def read_socket_loop(self):
         """循环读取 Socket 中的 JSON 事件"""
-        buffer = ""
-        while self.bridge_connected:
-            try:
-                data = self.sock.recv(4096).decode('utf-8')
-                if not data:
-                    self.bridge_connected = False
-                    break
-                buffer += data
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
+        try:
+            with self.sock.makefile('r', encoding='utf-8') as f:
+                while self.bridge_connected:
+                    line = f.readline()
+                    if not line:
+                        self.bridge_connected = False
+                        break
                     if not line.strip(): continue
                     try:
                         event_data = json.loads(line)
                         self.root.after(0, self.handle_cli_event, event_data)
                     except json.JSONDecodeError:
                         pass
-            except Exception:
-                self.bridge_connected = False
-                break
+        except Exception:
+            self.bridge_connected = False
         self.log("[System] CLI Bridge disconnected.\n", "error")
 
     def handle_cli_event(self, data):
@@ -200,7 +196,11 @@ class ChatGUIV2:
         
         # update providers
         if old_state.get("available_providers") != new_state.get("available_providers"):
-            self.provider_combo['values'] = new_state.get("available_providers", [])
+            providers = new_state.get("available_providers", [])
+            if providers and isinstance(providers[0], dict):
+                self.provider_combo['values'] = [p.get("id", str(p)) for p in providers]
+            else:
+                self.provider_combo['values'] = providers
         
         # update models
         provider_changed = old_state.get("provider") != new_state.get("provider")

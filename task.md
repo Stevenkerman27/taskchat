@@ -11,3 +11,7 @@
 4. 我希望把代码变成CLI驱动的工具，即GUI只是指令拼接器，用户可以直接输入指令。目前的代码运行逻辑是怎么样的？这么修改是否可以让程序更有扩展性？(已完成)
 
 5. 完善CLI-GUI,。我希望把GUI做成CLI的辅助输入器。在启动GUI时同步启动CLI界面，在GUI中点击按钮等同于在CLI中发送指令，这样用户可以使用按钮操作，高级用户可以直接在CLI中打命令。在开始修改前分析是否可行(已完成)
+
+6. 修复工具调用模式下的状态管理bug。在GUI中发送工具结果后，如果发生错误或模型截断，不再出现“无反应”且按钮可以反复点击的问题。通过确保始终向界面发出响应消息并重置截断状态解决。(已完成)
+
+7. bug修复。bug1, 使用GUI时有时会在显示reasoning content后显示CLI bridge disconnected, CLI中显示包含content的完整答案。bug2, 使用kimi模型时如果包括工具调用就会报错，显示"Assistant: 发送工具结果失败: OpenAI API调用失败: Error code: 400 - {'code': 20015, 'message': 'thinking is enabled but reasoning_content is missing in assistant tool call message at index 4', 'data': None}" 请分析原因并修复。请注意有的模型不支持enable_thinking选项，这可能只是意味着这些模型没法开关思维，并不是不具备思维链(已完成)

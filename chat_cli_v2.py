@@ -52,26 +52,24 @@ class ChatCLI:
 
     def handle_client(self, client_sock):
         """处理来自 GUI 的连接"""
-        buffer = ""
-        while self.running:
-            try:
-                data = client_sock.recv(4096).decode('utf-8')
-                if not data: break
-                buffer += data
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
+        try:
+            with client_sock.makefile('r', encoding='utf-8') as f:
+                while self.running:
+                    line = f.readline()
+                    if not line: break
                     if not line.strip(): continue
                     try:
                         cmd_data = json.loads(line)
                         self.cmd_queue.put(("json", cmd_data))
                     except json.JSONDecodeError:
                         # 兼容直接发送字符串
-                        self.cmd_queue.put(("text", line))
-            except Exception:
-                break
-        if client_sock in self.clients:
-            self.clients.remove(client_sock)
-        client_sock.close()
+                        self.cmd_queue.put(("text", line.strip()))
+        except Exception:
+            pass
+        finally:
+            if client_sock in self.clients:
+                self.clients.remove(client_sock)
+            client_sock.close()
 
     def emit(self, msg_type, content, silent_console=False, **kwargs):
         # 广播给所有 Socket 客户端 (始终是 JSON)
@@ -437,10 +435,13 @@ Available Commands:
         if reason:
             self.emit("reasoning", reason)
         
+        # 始终发出回答（包括工具调用的检测信息或错误信息）
+        if ans:
+            self.emit("assistant", ans)
+            
         if self.logic.is_in_tool_call_mode():
             self.emit("tool_calls", self.logic.get_pending_tool_calls())
-        else:
-            self.emit("assistant", ans)
+            
         self.emit_state()
 
     def do_execute(self):
@@ -454,10 +455,13 @@ Available Commands:
         if reason:
             self.emit("reasoning", reason)
             
+        # 始终发出回答（包括工具调用的检测信息或错误信息）
+        if ans:
+            self.emit("assistant", ans)
+            
         if self.logic.is_in_tool_call_mode():
             self.emit("tool_calls", self.logic.get_pending_tool_calls())
-        else:
-            self.emit("assistant", ans)
+            
         self.emit_state()
 
     def _get_state_dict(self):

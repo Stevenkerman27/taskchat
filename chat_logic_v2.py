@@ -231,7 +231,7 @@ class ChatLogicV2:
                     tool_calls = choice.message.tool_calls
                     if tool_calls:
                         # 处理工具调用
-                        return self._handle_tool_calls(user_input, tool_calls, payload)
+                        return self._handle_tool_calls(user_input, tool_calls, payload, reasoning_content)
             
             # 只有在API调用成功后才更新上下文
             self.add_message("user", user_input)
@@ -244,7 +244,7 @@ class ChatLogicV2:
             error_msg = f"Error: {str(e)}"
             return error_msg, None, payload
     
-    def _handle_tool_calls(self, user_input: Optional[str], tool_calls: List[Any], original_payload: Dict[str, Any]) -> Tuple[str, Optional[str], Dict[str, Any]]:
+    def _handle_tool_calls(self, user_input: Optional[str], tool_calls: List[Any], original_payload: Dict[str, Any], reasoning_content: Optional[str] = None) -> Tuple[str, Optional[str], Dict[str, Any]]:
         """处理工具调用 - 现在只准备工具调用，不自动执行"""
         try:
             # 保存状态用于手动工具调用
@@ -259,7 +259,7 @@ class ChatLogicV2:
                 self.add_message("user", user_input)
             
             # 创建包含tool_calls的助手消息
-            assistant_message = self._create_assistant_message_with_tool_calls(tool_calls)
+            assistant_message = self._create_assistant_message_with_tool_calls(tool_calls, reasoning_content)
             self.messages.append(assistant_message)
             
             # 保存待处理的工具调用信息
@@ -349,12 +349,15 @@ class ChatLogicV2:
                     tool_calls = choice.message.tool_calls
                     if tool_calls:
                         # 处理新的工具调用，不传入user_input避免重复添加
-                        return self._handle_tool_calls(None, tool_calls, new_payload)
+                        return self._handle_tool_calls(None, tool_calls, new_payload, reasoning_content)
             
-            # 如果没有工具调用且返回了系统警告（因为模型截断），保留工具模式状态，避免默默退出
+            # 如果没有工具调用且返回了系统警告（因为模型截断）
             if final_answer and "[系统警告" in final_answer:
-                # 依然添加助手消息
                 self.add_message("assistant", final_answer)
+                # 注意：此处我们也选择重置工具模式，因为没有新的tool_calls意味着当前轮次已结束
+                # 否则用户会卡在工具模式中无法继续对话
+                self.tool_call_mode = False
+                self.pending_tool_calls = []
                 return final_answer, reasoning_content, new_payload
 
             # 添加最终助手消息
@@ -370,6 +373,8 @@ class ChatLogicV2:
             
         except Exception as e:
             error_msg = f"发送工具结果失败: {str(e)}"
+            # 发生异常时也尝试重置，或者保持现状允许重试？
+            # 为了安全起见，我们保持现状但确保错误信息被发出（已在ChatCLI中处理）
             return error_msg, None, self.last_payload
     
     def get_pending_tool_calls(self) -> List[Dict[str, Any]]:
@@ -402,30 +407,35 @@ class ChatLogicV2:
                 # 遇到 user 或 system 消息时停止回退
                 break
     
-    def _create_assistant_message_with_tool_calls(self, tool_calls: List[Any]) -> InternalMessage:
+    def _create_assistant_message_with_tool_calls(self, tool_calls: List[Any], reasoning_content: Optional[str] = None) -> InternalMessage:
         """创建包含tool_calls的助手消息"""
         from message_models import InternalMessage, MessagePart
         
         # 创建消息内容
         content = [MessagePart(type="text", content="")]
         
+        metadata = {
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments
+                    }
+                }
+                for tool_call in tool_calls
+            ]
+        }
+        
+        if reasoning_content is not None:
+            metadata["reasoning_content"] = reasoning_content
+            
         # 创建消息
         message = InternalMessage(
             role="assistant",
             content=content,
-            metadata={
-                "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments
-                        }
-                    }
-                    for tool_call in tool_calls
-                ]
-            }
+            metadata=metadata
         )
         
         return message

@@ -1,7 +1,6 @@
 Chinese character involved in this project, mind encoding!
 使用myml python环境,位于D:\Software\anaconda\envs\myml
 我需要你帮助我开发agent程序。主文件为chat_logic_v2.py和chat_gui_v2.py
-使用API前，调用context7 MCP查询文档
 阅读task.md, 完成最新一条未完成的任务。理解任务后先与用户讨论想法, must ensure alignment before start editing
 mistakes部分中记录了过去常犯的错误，必须阅读保证不再犯错。如果有新的frequent mistake同样记录在mistakes部分中
 
