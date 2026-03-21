@@ -17,9 +17,7 @@ class ChatLogicV2:
         self.raw_config = self._load_config()
         self.providers_configs: Dict[str, ProviderConfig] = self._parse_provider_configs()
         self.current_strategy = None
-        self.messages: List[InternalMessage] = [
-            create_text_message("system", "你是一个强大的AI代码助手。当用户提出需要多步操作的任务时，请自主规划步骤并连续调用工具直到任务完全完成。不要在任务中途停止。如果前一个工具调用成功，请继续调用下一个工具，直到达到最终目标。")
-        ]
+        self.messages: List[InternalMessage] = self._get_system_message()
         self.options = ChatOptions()
         self.tools_config = self._load_tools_config()
         self._init_strategy()
@@ -33,6 +31,19 @@ class ChatLogicV2:
         # 聊天记录保存相关
         self.contexts_dir = "contexts"
         self._ensure_contexts_dir()
+    
+    def _get_system_message(self) -> List[InternalMessage]:
+        """获取系统指令，如果存在rules.md则读取，否则无系统指令"""
+        messages = []
+        try:
+            if os.path.exists("rules.md"):
+                with open("rules.md", "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        messages.append(create_text_message("system", content))
+        except Exception as e:
+            print(f"警告: 读取 rules.md 失败: {e}")
+        return messages
     
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
@@ -172,8 +183,8 @@ class ChatLogicV2:
         self.messages.append(message)
     
     def clear_context(self):
-        """清空上下文"""
-        self.messages = []
+        """清空上下文，并重新加载系统指令"""
+        self.messages = self._get_system_message()
     
     def set_option(self, key: str, value: Any):
         """设置聊天选项"""
