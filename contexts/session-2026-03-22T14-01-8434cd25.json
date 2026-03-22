@@ -1,0 +1,45 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "content": "You are a helpful AI agent"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "content": "hello"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "content": "Hello! How can I help you today?"
+        }
+      ],
+      "metadata": {}
+    }
+  ],
+  "state": {
+    "tool_call_mode": false,
+    "pending_tool_calls": [],
+    "last_user_input": "",
+    "last_payload": {}
+  },
+  "metadata": {
+    "saved_at": "2026-03-22T14:01:21.068948",
+    "provider": "Silicon_flow",
+    "model": "moonshotai/Kimi-K2.5"
+  }
+}
