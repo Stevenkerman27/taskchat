@@ -75,6 +75,8 @@ def test_cli():
 
     # --- 初始化 ---
     print("\n[TEST] 基础配置中...")
+    send_cmd({"cmd": "raw", "args": {"text": "/clear"}})
+    wait_for_sys("Context cleared", timeout=5)
     send_cmd({"cmd": "raw", "args": {"text": "/provider Silicon_flow"}})
     wait_for_sys("Switched to Silicon_flow")
     send_cmd({"cmd": "raw", "args": {"text": "/tools basic,filesystem"}})
@@ -89,6 +91,7 @@ def test_cli():
 
     last_activity_time = time.time()
     wait_for_terminal = False # 是否进入收尾静默期等待
+    send_results_count = 0 # 防止死循环
     
     while True:
         msg = get_json_msg(timeout=0.1)
@@ -112,20 +115,29 @@ def test_cli():
                     print(f"-> 执行工具: {[tc.get('function_name') for tc in to_execute]}")
                     send_cmd({"cmd": "execute"})
                     wait_for_terminal = False # 重置静默期
+                    send_results_count = 0 # 重置计数器
                 else:
-                    # 所有工具都已执行，但模型还没收到结果
-                    print("-> 工具列表已全部执行，手动同步结果...")
-                    send_cmd({"cmd": "send_results"})
-                    wait_for_terminal = False
+                    if send_results_count < 3:
+                        # 所有工具都已执行，但模型还没收到结果
+                        print("-> 工具列表已全部执行，手动同步结果...")
+                        send_cmd({"cmd": "send_results"})
+                        wait_for_terminal = False
+                        send_results_count += 1
+                    else:
+                        print("-> [TEST] 多次发送结果失败，判定为死循环，强制退出。")
+                        break
             
             elif m_type == "tool_result":
                 print(f"[RECV] tool_result received. 即将发送结果回 Agent...")
                 send_cmd({"cmd": "send_results"})
                 wait_for_terminal = False
+                send_results_count = 1
             
             elif m_type == "assistant":
                 print(f"\n[ASSISTANT] {content}")
                 wait_for_terminal = True # AI 发话了，可能进入收尾阶段，开始倒计时
+                if "发送工具结果失败" in content or "API调用失败" in content:
+                    print(f"-> [TEST] 检测到 API 错误，可能导致死循环，不再继续重试。")
             
             elif m_type == "error":
                 print(f"!!! 错误: {content}")

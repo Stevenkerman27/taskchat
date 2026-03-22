@@ -1,0 +1,108 @@
+=== 开始测试 CLI 功能 (异步观察模式) ===
+
+[TEST] 基础配置中...
+[SYS] System initialized. deepseek - deepseek-chat
+[SYS] Switched to Silicon_flow - moonshotai/Kimi-K2.5
+[SYS] Enabled tool groups updated. Active tools: get_time, ls, move_file, ping, read_file, write_file
+[SYS] Set option temperature = 1
+
+[USER] 请读取当前时间，然后阅读 test/test_write.txt 的内容并告诉我。把该文件内容修改为 '测试成功' 并附带你刚才读到的时间。修改完后请再次读取文件 确认。
+[RECV] payload: model=moonshotai/Kimi-K2.5
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 检测到 2 个工具调用，请在GUI中手动执行。
+[RECV] tool_calls: 2 items
+-> 执行工具: ['get_time', 'read_file']
+[RECV] tool_result received. 即将发送结果回 Agent...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 检测到 1 个工具调用，请在GUI中手动执行。
+[RECV] tool_calls: 1 items
+-> 执行工具: ['write_file']
+[RECV] tool_result received. 即将发送结果回 Agent...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 检测到 1 个工具调用，请在GUI中手动执行。
+[RECV] tool_calls: 1 items
+-> 执行工具: ['read_file']
+[RECV] tool_result received. 即将发送结果回 Agent...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 完成！以下是完整的操作记录：
+
+---
+
+## 📅 当前时间
+**2026年3月22日（星期日）12:30:33**
+
+---
+
+## 📄 文件操作详情
+
+### 1️⃣ 原始内容
+```
+你好世界
+```
+
+### 2️⃣ 修改后内容
+```
+测试成功
+时间：2026-03-22 12:30:33
+```
+
+### 3️⃣ 确认读取结果
+✅ **文件内容已成功更新！**
+- 文件大小：42 字节
+- 行数：2 行
+- 修改时间：2026-03-22 12:30:36
+
+---
+
+所有操作已成功完成！🎉
+[RECV] tool_calls: 1 items
+-> 工具列表已全部执行，手动同步结果...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 完成！以下是操作记录：
+
+## 📅 当前时间
+**2026年3月22日（星期日）12:30:33**
+
+---
+
+## 📄 文件操作记录
+
+### 1. 原始内容
+文件 `test/test_write.txt` 的原内容为：
+```
+你好世界
+```
+
+### 2. 修改内容
+已将文件修改为：
+```
+测试成功
+时间：2026-03-22 12:30:33
+```
+
+### 3. 确认读取
+再次读取文件，确认修改成功：
+```
+测试成功
+时间：2026-03-22 12:30:33
+```
+
+✅ **文件修改成功！** 文件大小：42 字节，共 2 行。
+[RECV] tool_calls: 1 items
+-> 工具列表已全部执行，手动同步结果...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 发送工具结果失败: OpenAI API调用失败: Error code: 400 - {'code': 20015, 'message': 'thinking is enabled but reasoning_content is missing in assistant tool call message at index 25', 'data': None}
+[RECV] tool_calls: 1 items
+-> 工具列表已全部执行，手动同步结果...
+[RECV] payload: model=moonshotai/Kimi-K2.5
+
+[ASSISTANT] 发送工具结果失败: OpenAI API调用失败: Error code: 400 - {'code': 20015, 'message': 'thinking is enabled but reasoning_content is missing in assistant tool call message at index 25', 'data': None}
+[RECV] tool_calls: 1 items
+-> 工具列表已全部执行，手动同步结果...
+[RECV] payload: model=moonshotai/Kimi-K2.5

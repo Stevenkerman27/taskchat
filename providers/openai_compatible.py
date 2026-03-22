@@ -82,11 +82,12 @@ class OpenAICompatibleStrategy(ProviderStrategy):
             
             # 处理 reasoning_content，适配 Kimi 等要求
             if msg.role == "assistant":
-                if "reasoning_content" in msg.metadata:
+                if "reasoning_content" in msg.metadata and msg.metadata["reasoning_content"]:
                     formatted_msg["reasoning_content"] = msg.metadata["reasoning_content"]
                 elif "tool_calls" in msg.metadata:
                     # Kimi 要求有 tool_calls 时（且开启了 thinking）必须有 reasoning_content
-                    formatted_msg["reasoning_content"] = ""
+                    # 避免传空字符串导致 "reasoning_content is missing" 或内容为空的报错
+                    formatted_msg["reasoning_content"] = "（工具调用暂无思考过程）"
             
             formatted.append(formatted_msg)
         return formatted

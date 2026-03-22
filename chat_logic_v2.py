@@ -17,7 +17,6 @@ class ChatLogicV2:
         self.raw_config = self._load_config()
         self.providers_configs: Dict[str, ProviderConfig] = self._parse_provider_configs()
         self.current_strategy = None
-        self.messages: List[InternalMessage] = self._get_system_message()
         self.options = ChatOptions()
         self.tools_config = self._load_tools_config()
         self._init_strategy()
@@ -27,10 +26,87 @@ class ChatLogicV2:
         self.tool_call_mode: bool = False
         self.last_user_input: str = ""
         self.last_payload: Dict[str, Any] = {}
+        self.messages: List[InternalMessage] = []
         
         # 聊天记录保存相关
         self.contexts_dir = "contexts"
         self._ensure_contexts_dir()
+        self.session_file = os.path.join(self.contexts_dir, "current_session.json")
+        
+        self._load_state()
+        if not self.messages:
+            self.messages = self._get_system_message()
+            self._save_state()
+
+    def _load_state(self):
+        """从当前会话的JSON文件加载状态"""
+        if hasattr(self, 'session_file') and os.path.exists(self.session_file):
+            try:
+                with open(self.session_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # 恢复消息
+                self.messages = []
+                for msg_dict in data.get("messages", []):
+                    msg = InternalMessage(
+                        role=msg_dict["role"],
+                        content=msg_dict["content"],
+                        metadata=msg_dict.get("metadata", {})
+                    )
+                    self.messages.append(msg)
+                
+                # 恢复工具调用状态
+                state = data.get("state", {})
+                self.tool_call_mode = state.get("tool_call_mode", False)
+                self.pending_tool_calls = state.get("pending_tool_calls", [])
+                self.last_user_input = state.get("last_user_input", "")
+                self.last_payload = state.get("last_payload", {})
+            except Exception as e:
+                print(f"警告: 读取状态失败 {e}")
+        else:
+            if not getattr(self, 'messages', None):
+                self.messages = self._get_system_message()
+
+    def _save_state(self):
+        """保存状态到当前会话的JSON文件"""
+        if not hasattr(self, 'session_file'):
+            self.session_file = os.path.join(self.contexts_dir, "current_session.json")
+            
+        data = {
+            "messages": [
+                {
+                    "role": msg.role,
+                    "content": [part.model_dump() if hasattr(part, 'model_dump') else part for part in msg.content],
+                    "metadata": msg.metadata
+                } for msg in self.messages
+            ],
+            "state": {
+                "tool_call_mode": self.tool_call_mode,
+                "pending_tool_calls": self.pending_tool_calls,
+                "last_user_input": self.last_user_input,
+                "last_payload": self.last_payload
+            },
+            "metadata": {
+                "saved_at": datetime.datetime.now().isoformat(),
+                "provider": getattr(self, 'current_provider_name', 'unknown'),
+                "model": getattr(self.current_strategy, 'model', 'unknown') if getattr(self, 'current_strategy', None) else "unknown"
+            }
+        }
+        
+        try:
+            import tempfile
+            temp_fd, temp_path = tempfile.mkstemp(dir=self.contexts_dir, suffix='.tmp')
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.session_file)
+        except Exception as e:
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            print(f"警告: 保存状态失败 {e}")
     
     def _get_system_message(self) -> List[InternalMessage]:
         """获取系统指令，如果存在rules.md则读取，否则无系统指令"""
@@ -181,10 +257,16 @@ class ChatLogicV2:
         """添加消息到上下文"""
         message = create_text_message(role, content, **kwargs)
         self.messages.append(message)
+        self._save_state()
     
     def clear_context(self):
         """清空上下文，并重新加载系统指令"""
         self.messages = self._get_system_message()
+        self.tool_call_mode = False
+        self.pending_tool_calls = []
+        self.last_user_input = ""
+        self.last_payload = {}
+        self._save_state()
     
     def set_option(self, key: str, value: Any):
         """设置聊天选项"""
@@ -207,8 +289,21 @@ class ChatLogicV2:
         获取完整的API请求负载
         确保与GUI预览框中的内容完全一致
         """
-        # 创建临时消息列表
-        temp_messages = self.messages.copy()
+        self._load_state()
+        
+        # 创建临时消息列表，过滤掉不需要的思维链内容
+        temp_messages = []
+        for msg in self.messages:
+            new_metadata = msg.metadata.copy() if msg.metadata else {}
+            if "reasoning_content" in new_metadata and not new_metadata.get("tool_calls"):
+                del new_metadata["reasoning_content"]
+            new_msg = InternalMessage(
+                role=msg.role,
+                content=msg.content,
+                metadata=new_metadata
+            )
+            temp_messages.append(new_msg)
+            
         if user_input:
             temp_messages.append(create_text_message("user", user_input))
         
@@ -225,6 +320,8 @@ class ChatLogicV2:
     
     def chat(self, user_input: str) -> Tuple[str, Optional[str], Dict[str, Any]]:
         """发送聊天请求，返回(最终答案, 思维链内容, payload)"""
+        self._load_state()
+        
         # 获取负载（确保与预览一致）
         payload = self.get_full_payload(user_input)
         
@@ -283,6 +380,7 @@ class ChatLogicV2:
                     "result": None
                 })
             
+            self._save_state()
             # 返回工具调用信息，而不是自动执行
             tool_call_info = f"检测到 {len(tool_calls)} 个工具调用，请在GUI中手动执行。"
             return tool_call_info, None, original_payload
@@ -293,6 +391,7 @@ class ChatLogicV2:
     
     def execute_pending_tools(self) -> List[Dict[str, Any]]:
         """执行所有待处理的工具调用"""
+        self._load_state()
         try:
             from tools.tools_impl import execute_tool
             
@@ -330,6 +429,7 @@ class ChatLogicV2:
                             "error": error_msg
                         })
             
+            self._save_state()
             return executed_tools
             
         except Exception as e:
@@ -337,13 +437,27 @@ class ChatLogicV2:
     
     def send_tool_results_to_agent(self) -> Tuple[str, Optional[str], Dict[str, Any]]:
         """将工具结果发送给agent获取最终答案"""
+        self._load_state()
         try:
             # 检查是否所有工具都已执行
             if not all(tool_call["executed"] for tool_call in self.pending_tool_calls):
                 return "请先执行所有待处理的工具调用", None, self.last_payload
             
             # 构建包含工具结果的payload进行第二轮调用
-            formatted_messages = self.current_strategy.format_messages(self.messages)
+            # 过滤掉不需要的思维链内容
+            temp_messages = []
+            for msg in self.messages:
+                new_metadata = msg.metadata.copy() if msg.metadata else {}
+                if "reasoning_content" in new_metadata and not new_metadata.get("tool_calls"):
+                    del new_metadata["reasoning_content"]
+                new_msg = InternalMessage(
+                    role=msg.role,
+                    content=msg.content,
+                    metadata=new_metadata
+                )
+                temp_messages.append(new_msg)
+                
+            formatted_messages = self.current_strategy.format_messages(temp_messages)
             
             # 构建新的payload
             new_payload = self.last_payload.copy()
@@ -373,15 +487,16 @@ class ChatLogicV2:
 
             # 添加最终助手消息
             self.add_message("assistant", final_answer)
-            
+
             # 重置工具调用状态
             self.tool_call_mode = False
             self.pending_tool_calls = []
             self.last_user_input = ""
             self.last_payload = {}
-            
-            return final_answer, reasoning_content, new_payload
-            
+
+            self._save_state()
+
+            return final_answer, reasoning_content, new_payload            
         except Exception as e:
             error_msg = f"发送工具结果失败: {str(e)}"
             # 发生异常时也尝试重置，或者保持现状允许重试？
@@ -390,14 +505,17 @@ class ChatLogicV2:
     
     def get_pending_tool_calls(self) -> List[Dict[str, Any]]:
         """获取待处理的工具调用列表"""
+        self._load_state()
         return self.pending_tool_calls.copy()
     
     def is_in_tool_call_mode(self) -> bool:
         """检查是否处于工具调用模式"""
+        self._load_state()
         return self.tool_call_mode
     
     def cancel_tool_calls(self):
         """取消工具调用，恢复正常聊天模式"""
+        self._load_state()
         self.tool_call_mode = False
         self.pending_tool_calls = []
         self.last_user_input = ""
@@ -417,6 +535,7 @@ class ChatLogicV2:
             else:
                 # 遇到 user 或 system 消息时停止回退
                 break
+        self._save_state()
     
     def _create_assistant_message_with_tool_calls(self, tool_calls: List[Any], reasoning_content: Optional[str] = None) -> InternalMessage:
         """创建包含tool_calls的助手消息"""
@@ -719,6 +838,7 @@ class ChatLogicV2:
                 self.tool_call_mode = True
                 # 注意：pending_tool_calls无法从文件恢复，需要重新调用
             
+            self._save_state()
             print(f"已加载聊天记录: {metadata.get('message_count', 0)} 条消息")
             return True
             

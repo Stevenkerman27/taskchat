@@ -17,3 +17,5 @@
 7. bug修复。bug1, 使用GUI时有时会在显示reasoning content后显示CLI bridge disconnected, CLI中显示包含content的完整答案。bug2, 使用kimi模型时如果包括工具调用就会报错，显示"Assistant: 发送工具结果失败: OpenAI API调用失败: Error code: 400 - {'code': 20015, 'message': 'thinking is enabled but reasoning_content is missing in assistant tool call message at index 4', 'data': None}" 请分析原因并修复。请注意有的模型不支持enable_thinking选项，这可能只是意味着这些模型没法开关思维，并不是不具备思维链(已完成)
 
 8. 添加attach系统指令的功能。将rules.md(如存在)中的内容作为系统指令加入context，而不是硬编码。如无rules.md就无系统指令(已完成)
+
+9. 将所有实时对话上下文存储在context中的JSON文件中（如current_session.json），每次操作（发送、工具调用）均以JSON文件作为确认当前状态的单一事实来源。在读取用于大模型API的Payload时，过滤掉上一轮的思维链内容，以节省Token并减少长上下文干扰。(已完成)
