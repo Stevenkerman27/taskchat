@@ -207,9 +207,10 @@ class ChatCLI:
                 self.logic.cancel_tool_calls()
                 self.emit("sys", "Tool calls cancelled.")
                 self.emit_state()
-            elif cmd == "clear":
+            elif cmd == "new" or cmd == "clear":
                 self.logic.clear_context()
-                self.emit("sys", "Context cleared.")
+                self.emit("sys", "New session started.")
+                self.emit_state()
             elif cmd == "save":
                 self.logic.save_context_to_file(args.get("filename"))
                 self.emit("sys", f"Chat saved to {args.get('filename')}")
@@ -264,7 +265,7 @@ Available Commands:
   /execute             - Execute pending tool calls
   /send_results        - Send tool results back to the assistant
   /cancel_tools        - Cancel pending tool calls
-  /clear               - Clear chat context
+  /new                 - Start a new blank session
   /save <filename>     - Save current chat to a file
   /load <filename>     - Load a chat from a file
   /state               - Show current system state
@@ -396,9 +397,10 @@ Available Commands:
             self.logic.cancel_tool_calls()
             self.emit("sys", "Tool calls cancelled.")
             self.emit_state()
-        elif line == "/clear":
+        elif line == "/new" or line == "/clear":
             self.logic.clear_context()
-            self.emit("sys", "Context cleared.")
+            self.emit("sys", "New session started.")
+            self.emit_state()
         elif line.startswith("/save "):
             filename = line[6:].strip()
             try:

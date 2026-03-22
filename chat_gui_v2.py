@@ -520,13 +520,10 @@ class ChatGUIV2:
         self.send_btn = tk.Button(self.btn_frame, text="Send Chat", command=self.send_message, width=12)
         self.send_btn.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
-        self.clear_btn = tk.Button(self.btn_frame, text="Clear Context", command=self.clear_context, width=12)
-        self.clear_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        self.new_btn = tk.Button(self.btn_frame, text="New Session", command=self.new_session, width=12)
+        self.new_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
         
-        self.save_btn = tk.Button(self.btn_frame, text="Save Chat", command=self.save_chat_context, width=12)
-        self.save_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, pady=(5, 0))
-        
-        self.load_btn = tk.Button(self.btn_frame, text="Load Chat", command=self.load_chat_context, width=12)
+        self.load_btn = tk.Button(self.btn_frame, text="Load History", command=self.load_chat_context, width=12)
         self.load_btn.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, pady=(5, 0))
     
     def send_command(self):
@@ -592,8 +589,9 @@ class ChatGUIV2:
         self.preview_area.insert(tk.END, json.dumps(payload, indent=2, ensure_ascii=False))
         self.preview_area.configure(state='disabled')
     
-    def clear_context(self):
-        self.send_cmd("clear")
+    def new_session(self):
+        """发送新建会话指令"""
+        self.send_cmd("new")
         self.output_area.configure(state='normal')
         self.output_area.delete("1.0", tk.END)
         self.output_area.configure(state='disabled')
@@ -623,38 +621,7 @@ class ChatGUIV2:
         if messagebox.askyesno("取消工具调用", "确定要取消当前的工具调用吗？"):
             self.send_cmd("cancel_tools")
             self.trigger_preview_update()
-    
-    def save_chat_context(self):
-        if self.current_state.get("tool_call_mode", False):
-            messagebox.showerror("保存失败", "无法在思维链中途保存聊天记录")
-            return
-            
-        save_dialog = tk.Toplevel(self.root)
-        save_dialog.title("保存聊天记录")
-        save_dialog.geometry("400x200")
-        save_dialog.transient(self.root)
-        save_dialog.grab_set()
-        
-        default_filename = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        tk.Label(save_dialog, text="文件名:").pack(pady=(20, 5))
-        filename_var = tk.StringVar(value=default_filename)
-        filename_entry = tk.Entry(save_dialog, textvariable=filename_var, width=40)
-        filename_entry.pack(pady=5)
-        
-        def do_save():
-            filename = filename_var.get().strip()
-            if not filename:
-                messagebox.showerror("错误", "文件名不能为空")
-                return
-            self.send_cmd("save", {"filename": filename})
-            save_dialog.destroy()
-            messagebox.showinfo("请求已发送", f"保存请求已发送: {filename}.json")
-        
-        button_frame = tk.Frame(save_dialog)
-        button_frame.pack(pady=20)
-        tk.Button(button_frame, text="保存", command=do_save, width=10).pack(side=tk.LEFT, padx=10)
-        tk.Button(button_frame, text="取消", command=save_dialog.destroy, width=10).pack(side=tk.LEFT, padx=10)
-    
+
     def load_chat_context(self):
         if self.current_state.get("tool_call_mode", False):
             messagebox.showerror("加载失败", "无法在思维链中途加载聊天记录")
@@ -723,7 +690,7 @@ class ChatGUIV2:
             context = saved_contexts[index]
             filename = context['filename']
             
-            if messagebox.askyesno("确认加载", f"确定要加载聊天记录 '{filename}' 吗？\n这将覆盖当前的聊天上下文。"):
+            if messagebox.askyesno("确认加载", f"确定要基于聊天记录 '{filename}' 启动新会话吗？"):
                 self.send_cmd("load", {"filename": filename})
                 self.trigger_preview_update()
                 load_dialog.destroy()

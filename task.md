@@ -19,3 +19,5 @@
 8. 添加attach系统指令的功能。将rules.md(如存在)中的内容作为系统指令加入context，而不是硬编码。如无rules.md就无系统指令(已完成)
 
 9. 将所有实时对话上下文存储在context中的JSON文件中（如current_session.json），每次操作（发送、工具调用）均以JSON文件作为确认当前状态的单一事实来源。在读取用于大模型API的Payload时，过滤掉上一轮的思维链内容，以节省Token并减少长上下文干扰。(已完成)
+
+10. 现在程序只会操作current session一个context文件。参考@contexts/session-2026-03-22T11-26-1adc8d45.json的命名方式,独立保存每次的session. 每次启动程序默认创建新session,如果load session也要创建新的保存文件而不是直接修改历史session.删除GUI中的save chat功能和按钮. 修改/clear功能为/new，即启动一个新的空白session(已完成)

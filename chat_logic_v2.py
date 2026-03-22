@@ -31,12 +31,19 @@ class ChatLogicV2:
         # 聊天记录保存相关
         self.contexts_dir = "contexts"
         self._ensure_contexts_dir()
-        self.session_file = os.path.join(self.contexts_dir, "current_session.json")
+        self.session_file = self._generate_session_filename()
         
         self._load_state()
         if not self.messages:
             self.messages = self._get_system_message()
             self._save_state()
+
+    def _generate_session_filename(self) -> str:
+        """生成唯一的会话文件名"""
+        import uuid
+        now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M")
+        suffix = uuid.uuid4().hex[:8]
+        return os.path.join(self.contexts_dir, f"session-{now}-{suffix}.json")
 
     def _load_state(self):
         """从当前会话的JSON文件加载状态"""
@@ -70,7 +77,7 @@ class ChatLogicV2:
     def _save_state(self):
         """保存状态到当前会话的JSON文件"""
         if not hasattr(self, 'session_file'):
-            self.session_file = os.path.join(self.contexts_dir, "current_session.json")
+            self.session_file = self._generate_session_filename()
             
         data = {
             "messages": [
@@ -260,7 +267,8 @@ class ChatLogicV2:
         self._save_state()
     
     def clear_context(self):
-        """清空上下文，并重新加载系统指令"""
+        """清空上下文，启动新的会话文件，并重新加载系统指令"""
+        self.session_file = self._generate_session_filename()
         self.messages = self._get_system_message()
         self.tool_call_mode = False
         self.pending_tool_calls = []
@@ -770,7 +778,7 @@ class ChatLogicV2:
         从文件加载聊天上下文
         
         Args:
-            filename: 文件名（需要完整路径或相对路径）
+            filename: 文件名（文件名或完整路径）
             
         Returns:
             bool: 加载是否成功
@@ -781,10 +789,12 @@ class ChatLogicV2:
                 raise ValueError("无法在思维链中途加载聊天记录")
             
             # 确保文件路径正确
-            if not os.path.isabs(filename):
-                filepath = os.path.join(self.contexts_dir, filename)
-            else:
+            if os.path.isabs(filename):
                 filepath = filename
+            elif filename.startswith(self.contexts_dir + os.sep) or filename.startswith(self.contexts_dir + "/"):
+                filepath = filename
+            else:
+                filepath = os.path.join(self.contexts_dir, filename)
             
             if not os.path.exists(filepath):
                 raise FileNotFoundError(f"文件不存在: {filepath}")
