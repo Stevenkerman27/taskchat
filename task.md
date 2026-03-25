@@ -22,4 +22,4 @@
 
 10. 现在程序只会操作current session一个context文件。参考@contexts/session-2026-03-22T11-26-1adc8d45.json的命名方式,独立保存每次的session. 每次启动程序默认创建新session,如果load session也要创建新的保存文件而不是直接修改历史session.删除GUI中的save chat功能和按钮. 修改/clear功能为/new，即启动一个新的空白session(已完成)
 
-11. 结构化 CLI 与增强交互着色(未完成)
+11. 结构化 CLI 与增强交互着色(已完成)

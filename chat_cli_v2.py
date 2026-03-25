@@ -5,7 +5,66 @@ import traceback
 import socket
 import threading
 import queue
+import shlex
+from typing import Callable, Dict, List, Any
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
+
 from chat_logic_v2 import ChatLogicV2
+
+console = Console()
+
+class CommandManager:
+    def __init__(self):
+        self.commands: Dict[str, Dict[str, Any]] = {}
+        
+    def cmd(self, name: str, aliases: List[str] = None, help_text: str = ""):
+        def decorator(func: Callable):
+            cmd_info = {"func": func, "help": help_text}
+            self.commands[name] = cmd_info
+            if aliases:
+                for alias in aliases:
+                    self.commands[alias] = cmd_info
+            return func
+        return decorator
+
+    def dispatch(self, input_line: str, context: Any) -> bool:
+        """
+        Dispatches the command. Returns True if a command was handled, False otherwise.
+        """
+        if not input_line.startswith('/'):
+            return False
+            
+        parts = shlex.split(input_line)
+        if not parts:
+            return False
+            
+        cmd_name = parts[0]
+        args = parts[1:]
+        
+        if cmd_name in self.commands:
+            try:
+                self.commands[cmd_name]["func"](context, *args)
+            except Exception as e:
+                context.emit("error", {"message": f"Command execution error: {str(e)}\n{traceback.format_exc()}"})
+            return True
+        else:
+            context.emit("error", {"message": f"Unknown command: {cmd_name}. Type /help for available commands."})
+            return True
+            
+    def get_help_text(self) -> str:
+        help_lines = ["Available Commands:"]
+        seen = set()
+        for name, info in self.commands.items():
+            if info["func"] not in seen:
+                help_lines.append(f"  {name.ljust(15)} - {info['help']}")
+                seen.add(info["func"])
+        return "\n".join(help_lines)
 
 class ChatCLI:
     def __init__(self, json_mode=False, port=None):
@@ -14,6 +73,10 @@ class ChatCLI:
         self.clients = []
         self.cmd_queue = queue.Queue()
         self.running = True
+        self.is_multiline = False
+        
+        self.cmd_manager = CommandManager()
+        self._register_commands()
         
         try:
             self.logic = ChatLogicV2()
@@ -23,6 +86,187 @@ class ChatCLI:
             
         if self.port:
             self.start_socket_server()
+
+    def _register_commands(self):
+        @self.cmd_manager.cmd("/help", help_text="Show this help message")
+        def _help(cli, *args):
+            if not cli.json_mode:
+                console.print(cli.cmd_manager.get_help_text())
+            else:
+                cli.emit("sys", cli.cmd_manager.get_help_text())
+
+        @self.cmd_manager.cmd("/exit", aliases=["/quit"], help_text="Exit the application")
+        def _exit(cli, *args):
+            sys.exit(0)
+
+        @self.cmd_manager.cmd("/chat", help_text="Send a message to the assistant")
+        def _chat(cli, *args):
+            msg = " ".join(args)
+            cli.do_chat(msg)
+
+        @self.cmd_manager.cmd("/provider", help_text="Switch provider and optionally model")
+        def _provider(cli, *args):
+            available = cli.logic.get_available_providers()
+            if not args:
+                cli.emit("sys", "Available Providers:")
+                for i, p in enumerate(available, 1):
+                    status = "[ACTIVE]" if p['is_current'] else ""
+                    cli.emit("sys", f"  {i}. {p['id']} ({p['name']}) {status}")
+                    cli.emit("sys", f"     Models: {', '.join(p['models'])}")
+                cli.emit("sys", "Use '/provider <name_or_index> [model]' to switch.")
+                return
+
+            provider_input = args[0]
+            model = args[1] if len(args) > 1 else None
+            
+            if provider_input.isdigit():
+                idx = int(provider_input) - 1
+                if 0 <= idx < len(available):
+                    provider_input = available[idx]['id']
+                else:
+                    cli.emit("error", {"message": f"Invalid provider index: {idx+1}"})
+                    return
+
+            try:
+                cli.logic.set_provider(provider_input, model)
+                cli.emit("sys", f"Switched to {provider_input} - {cli.logic.get_current_model()}")
+                cli.emit_state()
+            except Exception as e:
+                cli.emit("error", {"message": str(e)})
+
+        @self.cmd_manager.cmd("/option", help_text="Set a chat option (e.g. /option temperature 0.5)")
+        def _option(cli, *args):
+            current_options = cli.logic.get_current_options_dict()
+            if not args:
+                cli.emit("sys", "Current Chat Options:")
+                for i, (k, v) in enumerate(current_options.items(), 1):
+                    cli.emit("sys", f"  {i}. {k} = {v}")
+                cli.emit("sys", "Use '/option <key_or_index> <value>' to set.")
+                return
+
+            if len(args) >= 2:
+                key_input = args[0]
+                val_str = args[1]
+                
+                if key_input.isdigit():
+                    idx = int(key_input) - 1
+                    keys = list(current_options.keys())
+                    if 0 <= idx < len(keys):
+                        key_input = keys[idx]
+                    else:
+                        cli.emit("error", {"message": f"Invalid option index: {idx+1}"})
+                        return
+
+                try:
+                    if val_str.lower() == "true": val = True
+                    elif val_str.lower() == "false": val = False
+                    else:
+                        try: val = int(val_str)
+                        except ValueError:
+                            try: val = float(val_str)
+                            except ValueError: val = val_str
+                    cli.logic.set_option(key_input, val)
+                    cli.emit("sys", f"Set option {key_input} = {val}")
+                    cli.emit_state()
+                except Exception as e:
+                    cli.emit("error", {"message": str(e)})
+            else:
+                cli.emit("sys", "Usage: /option <key_or_index> <value>")
+
+        @self.cmd_manager.cmd("/tools", help_text="Enable tool groups (comma separated)")
+        def _tools(cli, *args):
+            tool_info = cli.logic.get_available_tool_groups()
+            all_groups = list(tool_info['groups'].keys())
+            
+            if not args:
+                cli.emit("sys", "Available Tool Groups:")
+                for i, group_name in enumerate(all_groups, 1):
+                    status = "[ACTIVE]" if group_name in tool_info['enabled'] else ""
+                    tools = tool_info['groups'][group_name].get('tools', [])
+                    desc = tool_info['groups'][group_name].get('description', '')
+                    cli.emit("sys", f"  {i}. {group_name} ({desc}) {status}")
+                    cli.emit("sys", f"     Tools: {', '.join(tools)}")
+                cli.emit("sys", "Use '/tools <name_or_index1,index2...>' to enable.")
+                return
+
+            args_str = " ".join(args)
+            inputs = [i.strip() for i in args_str.split(",") if i.strip()]
+            final_groups = []
+            for item in inputs:
+                if item.isdigit():
+                    idx = int(item) - 1
+                    if 0 <= idx < len(all_groups):
+                        final_groups.append(all_groups[idx])
+                    else:
+                        cli.emit("error", {"message": f"Invalid tool group index: {idx+1}"})
+                else:
+                    final_groups.append(item)
+            
+            cli.logic.set_enabled_tool_groups(final_groups)
+            enabled_tools = cli.logic.get_enabled_tools()
+            cli.emit("sys", f"Enabled tool groups updated. Active tools: {', '.join(enabled_tools) if enabled_tools else 'None'}")
+            cli.emit_state()
+
+        @self.cmd_manager.cmd("/execute", help_text="Execute pending tool calls")
+        def _execute(cli, *args):
+            cli.do_execute()
+
+        @self.cmd_manager.cmd("/send_results", help_text="Send tool results back to the assistant")
+        def _send_results(cli, *args):
+            cli.do_send_results()
+
+        @self.cmd_manager.cmd("/cancel_tools", help_text="Cancel pending tool calls")
+        def _cancel_tools(cli, *args):
+            cli.logic.cancel_tool_calls()
+            cli.emit("sys", "Tool calls cancelled.")
+            cli.emit_state()
+
+        @self.cmd_manager.cmd("/new", aliases=["/clear"], help_text="Start a new blank session")
+        def _new(cli, *args):
+            cli.logic.clear_context()
+            cli.emit("sys", "New session started.")
+            cli.emit_state()
+
+        @self.cmd_manager.cmd("/save", help_text="Save current chat to a file")
+        def _save(cli, *args):
+            if not args:
+                cli.emit("error", {"message": "Usage: /save <filename>"})
+                return
+            filename = args[0]
+            try:
+                cli.logic.save_context_to_file(filename)
+                cli.emit("sys", f"Chat saved to {filename}")
+            except Exception as e:
+                cli.emit("error", {"message": str(e)})
+
+        @self.cmd_manager.cmd("/load", help_text="Load a chat from a file")
+        def _load(cli, *args):
+            if not args:
+                cli.emit("error", {"message": "Usage: /load <filename>"})
+                return
+            filename = args[0]
+            try:
+                cli.logic.load_context_from_file(filename)
+                cli.emit("sys", f"Chat loaded from {filename}")
+                cli.emit_state()
+            except Exception as e:
+                cli.emit("error", {"message": str(e)})
+
+        @self.cmd_manager.cmd("/state", help_text="Show current system state")
+        def _state(cli, *args):
+            cli.emit_state()
+            if not cli.json_mode:
+                state = cli._get_state_dict()
+                console.print(f"State: {json.dumps(state, indent=2, ensure_ascii=False)}")
+                
+        @self.cmd_manager.cmd("/multiline", help_text="Toggle multiline input mode")
+        def _multiline(cli, *args):
+            cli.is_multiline = not cli.is_multiline
+            status = "ON" if cli.is_multiline else "OFF"
+            if not cli.json_mode:
+                console.print(f"[bold magenta]Multiline mode {status}[/bold magenta]. (Press Esc+Enter to submit in multiline mode)")
+            else:
+                cli.emit("sys", f"Multiline mode {status}")
 
     def start_socket_server(self):
         """启动后台 Socket 服务器，供 GUI 连接"""
@@ -92,32 +336,36 @@ class ChatCLI:
         else:
             if msg_type == "error":
                 msg = content.get("message", content) if isinstance(content, dict) else content
-                print(f"[ERROR] {msg}", flush=True)
+                console.print(f"[bold red]ERROR:[/bold red] {msg}")
             elif msg_type == "sys":
-                print(f"[SYSTEM] {content}", flush=True)
+                console.print(f"[dim cyan]SYSTEM:[/dim cyan] {content}")
             elif msg_type == "assistant":
-                print(f"\nAssistant:\n{content}\n", flush=True)
+                console.print("\n[bold green]Assistant:[/bold green]")
+                console.print(content)
+                console.print()
             elif msg_type == "user":
-                print(f"\nYou: {content}\n", flush=True)
+                console.print(f"\n[bold blue]You:[/bold blue] {content}\n")
             elif msg_type == "payload":
                 model = content.get("model", "unknown")
                 temp = content.get("temperature", "N/A")
                 max_tokens = content.get("max_tokens", "N/A")
                 tools_count = len(content.get("tools", []))
                 
-                # 尝试从不同提供商可能的字段提取 reasoning
                 reasoning = content.get("reasoning_content_generation")
                 if reasoning is None:
-                    # 尝试从逻辑选项中获取
                     reasoning = self.logic.options.provider_specific.get("reasoning", "off")
                 
-                print(f"[PAYLOAD] Model: {model} | Temp: {temp} | Max: {max_tokens} | Tools: {tools_count} | Reasoning: {reasoning}", flush=True)
+                console.print(f"[dim]PAYLOAD | Model: {model} | Temp: {temp} | Max: {max_tokens} | Tools: {tools_count} | Reasoning: {reasoning}[/dim]")
             elif msg_type == "reasoning":
-                print(f"Reasoning:\n{content}\n", flush=True)
+                console.print(Panel(content, title="Reasoning", border_style="dim", style="dim italic"))
             elif msg_type == "tool_calls":
-                print(f"Tool Calls:\n{json.dumps(content, indent=2, ensure_ascii=False)}\n", flush=True)
+                json_str = json.dumps(content, indent=2, ensure_ascii=False)
+                syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)
+                console.print(Panel(syntax, title="Tool Calls", border_style="yellow"))
             elif msg_type == "tool_result":
-                print(f"Tool Result:\n{json.dumps(content, indent=2, ensure_ascii=False)}\n", flush=True)
+                json_str = json.dumps(content, indent=2, ensure_ascii=False)
+                syntax = Syntax(json_str, "json", theme="monokai", line_numbers=False)
+                console.print(Panel(syntax, title="Tool Result", border_style="blue"))
             elif msg_type == "state":
                 pass 
             elif msg_type == "contexts_list":
@@ -129,28 +377,39 @@ class ChatCLI:
 
         # 启动 Stdin 读取线程
         def stdin_thread():
-            while self.running:
-                try:
-                    if not self.json_mode:
-                        print("> ", end="", flush=True)
-                    line = sys.stdin.readline()
-                    if not line:
-                        self.cmd_queue.put(("json", {"cmd": "exit"}))
-                        break
-                    line = line.strip()
-                    if line:
-                        if self.json_mode:
+            if self.json_mode:
+                while self.running:
+                    try:
+                        line = sys.stdin.readline()
+                        if not line:
+                            self.cmd_queue.put(("json", {"cmd": "exit"}))
+                            break
+                        line = line.strip()
+                        if line:
                             try:
                                 cmd_data = json.loads(line)
                                 self.cmd_queue.put(("json", cmd_data))
                             except json.JSONDecodeError:
                                 self.cmd_queue.put(("text", line))
-                        else:
-                            self.cmd_queue.put(("text", line))
-                except EOFError:
-                    break
-                except Exception:
-                    break
+                    except EOFError:
+                        break
+                    except Exception:
+                        break
+            else:
+                session = PromptSession(history=FileHistory('.chat_history'))
+                while self.running:
+                    try:
+                        line = session.prompt("> ", multiline=self.is_multiline)
+                        if not line.strip(): 
+                            continue
+                        self.cmd_queue.put(("text", line.strip()))
+                    except EOFError:
+                        self.cmd_queue.put(("json", {"cmd": "exit"}))
+                        break
+                    except KeyboardInterrupt:
+                        continue
+                    except Exception as e:
+                        break
         
         threading.Thread(target=stdin_thread, daemon=True).start()
 
@@ -253,178 +512,10 @@ class ChatCLI:
             self.emit("error", {"message": str(e)})
 
     def process_text_command(self, line):
-        if line == "/exit" or line == "/quit":
-            sys.exit(0)
-        elif line == "/help":
-            help_text = """
-Available Commands:
-  /chat <msg>          - Send a message to the assistant
-  /provider <p> [m]    - Switch provider and optionally model
-  /option <k> <v>      - Set a chat option (e.g. /option temperature 0.5)
-  /tools <g1,g2>       - Enable tool groups (comma separated)
-  /execute             - Execute pending tool calls
-  /send_results        - Send tool results back to the assistant
-  /cancel_tools        - Cancel pending tool calls
-  /new                 - Start a new blank session
-  /save <filename>     - Save current chat to a file
-  /load <filename>     - Load a chat from a file
-  /state               - Show current system state
-  /exit                - Exit the application
-  /help                - Show this help message
-            """
-            print(help_text)
-        elif line.startswith("/chat "):
-            msg = line[6:].strip()
-            self.do_chat(msg)
-        elif line.startswith("/provider"):
-            args_str = line[9:].strip()
-            available = self.logic.get_available_providers()
-            
-            if not args_str:
-                # 查询模式
-                self.emit("sys", "Available Providers:")
-                for i, p in enumerate(available, 1):
-                    status = "[ACTIVE]" if p['is_current'] else ""
-                    self.emit("sys", f"  {i}. {p['id']} ({p['name']}) {status}")
-                    self.emit("sys", f"     Models: {', '.join(p['models'])}")
-                self.emit("sys", "Use '/provider <name_or_index> [model]' to switch.")
-                return
-
-            parts = args_str.split()
-            provider_input = parts[0]
-            model = parts[1] if len(parts) > 1 else None
-            
-            # 处理数字索引
-            if provider_input.isdigit():
-                idx = int(provider_input) - 1
-                if 0 <= idx < len(available):
-                    provider_input = available[idx]['id']
-                else:
-                    self.emit("error", {"message": f"Invalid provider index: {idx+1}"})
-                    return
-
-            try:
-                self.logic.set_provider(provider_input, model)
-                self.emit("sys", f"Switched to {provider_input} - {self.logic.get_current_model()}")
-                self.emit_state()
-            except Exception as e:
-                self.emit("error", {"message": str(e)})
-
-        elif line.startswith("/option"):
-            args_str = line[7:].strip()
-            current_options = self.logic.get_current_options_dict()
-            
-            if not args_str:
-                # 查询模式
-                self.emit("sys", "Current Chat Options:")
-                for i, (k, v) in enumerate(current_options.items(), 1):
-                    self.emit("sys", f"  {i}. {k} = {v}")
-                self.emit("sys", "Use '/option <key_or_index> <value>' to set.")
-                return
-
-            parts = args_str.split(maxsplit=1)
-            if len(parts) == 2:
-                key_input, val_str = parts
-                
-                # 处理数字索引
-                if key_input.isdigit():
-                    idx = int(key_input) - 1
-                    keys = list(current_options.keys())
-                    if 0 <= idx < len(keys):
-                        key_input = keys[idx]
-                    else:
-                        self.emit("error", {"message": f"Invalid option index: {idx+1}"})
-                        return
-
-                try:
-                    if val_str.lower() == "true": val = True
-                    elif val_str.lower() == "false": val = False
-                    else:
-                        try:
-                            val = int(val_str)
-                        except ValueError:
-                            try:
-                                val = float(val_str)
-                            except ValueError:
-                                val = val_str
-                    self.logic.set_option(key_input, val)
-                    self.emit("sys", f"Set option {key_input} = {val}")
-                    self.emit_state()
-                except Exception as e:
-                    self.emit("error", {"message": str(e)})
-            else:
-                self.emit("sys", "Usage: /option <key_or_index> <value>")
-
-        elif line.startswith("/tools"):
-            args_str = line[6:].strip()
-            tool_info = self.logic.get_available_tool_groups()
-            all_groups = list(tool_info['groups'].keys())
-            
-            if not args_str:
-                # 查询模式
-                self.emit("sys", "Available Tool Groups:")
-                for i, group_name in enumerate(all_groups, 1):
-                    status = "[ACTIVE]" if group_name in tool_info['enabled'] else ""
-                    tools = tool_info['groups'][group_name].get('tools', [])
-                    desc = tool_info['groups'][group_name].get('description', '')
-                    self.emit("sys", f"  {i}. {group_name} ({desc}) {status}")
-                    self.emit("sys", f"     Tools: {', '.join(tools)}")
-                self.emit("sys", "Use '/tools <name_or_index1,index2...>' to enable.")
-                return
-
-            # 处理输入（支持逗号分隔的名字或索引）
-            inputs = [i.strip() for i in args_str.split(",") if i.strip()]
-            final_groups = []
-            for item in inputs:
-                if item.isdigit():
-                    idx = int(item) - 1
-                    if 0 <= idx < len(all_groups):
-                        final_groups.append(all_groups[idx])
-                    else:
-                        self.emit("error", {"message": f"Invalid tool group index: {idx+1}"})
-                else:
-                    final_groups.append(item)
-            
-            self.logic.set_enabled_tool_groups(final_groups)
-            enabled_tools = self.logic.get_enabled_tools()
-            self.emit("sys", f"Enabled tool groups updated. Active tools: {', '.join(enabled_tools) if enabled_tools else 'None'}")
-            self.emit_state()
-        elif line == "/execute":
-            self.do_execute()
-        elif line == "/send_results":
-            self.do_send_results()
-        elif line == "/cancel_tools":
-            self.logic.cancel_tool_calls()
-            self.emit("sys", "Tool calls cancelled.")
-            self.emit_state()
-        elif line == "/new" or line == "/clear":
-            self.logic.clear_context()
-            self.emit("sys", "New session started.")
-            self.emit_state()
-        elif line.startswith("/save "):
-            filename = line[6:].strip()
-            try:
-                self.logic.save_context_to_file(filename)
-                self.emit("sys", f"Chat saved to {filename}")
-            except Exception as e:
-                self.emit("error", {"message": str(e)})
-        elif line.startswith("/load "):
-            filename = line[6:].strip()
-            try:
-                self.logic.load_context_from_file(filename)
-                self.emit("sys", f"Chat loaded from {filename}")
-                self.emit_state()
-            except Exception as e:
-                self.emit("error", {"message": str(e)})
-        elif line == "/state":
-            self.emit_state()
-            if not self.json_mode:
-                state = self._get_state_dict()
-                print(f"State: {json.dumps(state, indent=2, ensure_ascii=False)}", flush=True)
-        elif line.startswith("/"):
-            self.emit("error", {"message": f"Unknown command: {line}"})
-        else:
-            self.do_chat(line)
+        if self.cmd_manager.dispatch(line, self):
+            return
+        # If it wasn't a command, treat it as a chat message
+        self.do_chat(line)
 
     def do_chat(self, msg):
         self.emit("user", msg)
