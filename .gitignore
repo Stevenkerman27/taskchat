@@ -5,3 +5,4 @@ outputs/
 .clinerules/
 .vscode/
 contexts/archive/
+.pytest_cache/
