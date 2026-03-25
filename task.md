@@ -23,3 +23,9 @@
 10. 现在程序只会操作current session一个context文件。参考@contexts/session-2026-03-22T11-26-1adc8d45.json的命名方式,独立保存每次的session. 每次启动程序默认创建新session,如果load session也要创建新的保存文件而不是直接修改历史session.删除GUI中的save chat功能和按钮. 修改/clear功能为/new，即启动一个新的空白session(已完成)
 
 11. 结构化 CLI 与增强交互着色(已完成)
+
+12. 优化cli代码。当前实现的缺陷主要集中在职责过度耦合和并发安全上：ChatCLI 沦为同时承担终端渲染、Socket 通信和事件广播的“上帝类”，严重违反单一职责原则；多线程环境下直接修改共享列表 self.clients 且未加同步锁，存在引发程序崩溃的隐患；此外，大量使用宽泛的 except Exception: pass 吞噬了错误，掩盖了真实的异常堆栈，而臃肿的 if-elif 消息渲染链条和毫无拆分的命令注册逻辑，也使代码丧失了良好的可扩展性与可测试性。并且不要保存.chat_history文件，聊天记录已记录在context文件夹中(已完成)
+
+13. 修复 CLI 命令(/provider, /option 等)因 dispatcher 冗余传递 context 导致参数偏移的 bug(已完成)
+
+14. 修复 CLI 终端渲染: 解决提示符消失和 ANSI 源码泄露问题。通过 capture 拦截 rich 输出并统一通过 prompt_toolkit 渲染管线输出，配合 patch_stdout() 保护输入提示符。(已完成)
