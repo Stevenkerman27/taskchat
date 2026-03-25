@@ -29,3 +29,9 @@
 13. 修复 CLI 命令(/provider, /option 等)因 dispatcher 冗余传递 context 导致参数偏移的 bug(已完成)
 
 14. 修复 CLI 终端渲染: 解决提示符消失和 ANSI 源码泄露问题。通过 capture 拦截 rich 输出并统一通过 prompt_toolkit 渲染管线输出，配合 patch_stdout() 保护输入提示符。(已完成)
+
+15. 整理progress文档。目前progress文件夹中主要是开发记录流水账,信息密度低。结合当前代码的情况，将它们提炼为客观规律，更新到全局progress.md的对应模块中。删除已修复的Bug 细节以及过时的模块描述，保持该文档作为当前系统架构与开发约束准则的纯粹性。(已完成)
+
+16. 添加工具。参考file-system.md/good_egs，实现或扩展ls, read_file,write_file, replace工具。注意ls默认忽略.gitignore文件, read_file只支持文本文件(已完成)
+
+17. 参考good_egs/file-system.md添加grep和glob. gemini的实现grep.ts和glob.ts在good_egs文件夹中可供参考(未实现)

@@ -7,13 +7,21 @@ tools:
   # 文件系统工具
   ls:
     name: "ls"
-    description: "列出指定目录下的文件和文件夹"
+    description: "列出指定目录下的文件和文件夹，支持 .gitignore 过滤"
     parameters:
       type: "object"
       properties:
         path:
           type: ["string", "null"]
           description: "目录路径（相对路径），默认为当前目录"
+        ignore:
+          type: ["array", "null"]
+          items:
+            type: "string"
+          description: "要忽略的 Glob 模式列表"
+        respect_git_ignore:
+          type: "boolean"
+          description: "是否尊重 .gitignore 规则，默认为 true"
       required: ["path"]
       additionalProperties: false
     implementation: "system"
@@ -40,14 +48,20 @@ tools:
   # 文件读取工具
   read_file:
     name: "read_file"
-    description: "读取指定文件的文本内容"
+    description: "读取指定文件的文本内容，支持分页读取"
     parameters:
       type: "object"
       properties:
-        filepath:
+        file_path:
           type: "string"
           description: "文件路径（相对路径）"
-      required: ["filepath"]
+        offset:
+          type: "integer"
+          description: "开始行号 (0-indexed)"
+        limit:
+          type: ["integer", "null"]
+          description: "读取的最大行数"
+      required: ["file_path"]
       additionalProperties: false
     implementation: "system"
     category: "filesystem"
@@ -59,13 +73,40 @@ tools:
     parameters:
       type: "object"
       properties:
-        filepath:
+        file_path:
           type: "string"
           description: "文件路径（相对路径）"
         content:
           type: "string"
           description: "要写入的内容"
-      required: ["filepath", "content"]
+      required: ["file_path", "content"]
+      additionalProperties: false
+    implementation: "system"
+    category: "filesystem"
+
+  # 文本替换工具
+  replace:
+    name: "replace"
+    description: "替换文件中的文本。默认要求 old_string 唯一，除非 allow_multiple 为 true。"
+    parameters:
+      type: "object"
+      properties:
+        file_path:
+          type: "string"
+          description: "文件路径 (相对路径)"
+        old_string:
+          type: "string"
+          description: "要查找并替换的精确字符串"
+        new_string:
+          type: "string"
+          description: "要替换为的新字符串"
+        allow_multiple:
+          type: "boolean"
+          description: "是否允许替换多个匹配项，默认为 false"
+        instruction:
+          type: ["string", "null"]
+          description: "对此次修改的简要描述 (可选)"
+      required: ["file_path", "old_string", "new_string"]
       additionalProperties: false
     implementation: "system"
     category: "filesystem"
@@ -107,7 +148,7 @@ tool_groups:
   filesystem:
     name: "文件系统工具"
     description: "文件操作相关工具"
-    tools: ["ls", "move_file", "read_file", "write_file"]
+    tools: ["ls", "move_file", "read_file", "write_file", "replace"]
 
 # 默认工具配置
 defaults:
@@ -132,9 +173,10 @@ defaults:
 # 工具实现函数映射
 implementations:
   system:
-    ls: "tools_impl.list_directory"
+    ls: "tools_impl.ls"
     get_time: "tools_impl.get_current_time"
     ping: "tools_impl.ping"
     move_file: "tools_impl.move_file"
-    read_file: "tools_impl.read_file_content"
-    write_file: "tools_impl.write_file_content"
+    read_file: "tools_impl.read_file"
+    write_file: "tools_impl.write_file"
+    replace: "tools_impl.replace"

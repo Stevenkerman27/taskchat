@@ -10,6 +10,7 @@ import inspect
 from typing import Dict, Any, Optional, Callable, List
 import socket
 import time
+import pathspec
 
 
 class ToolRegistry:
@@ -171,12 +172,14 @@ class ToolRegistry:
 # 创建全局工具注册表实例
 _tool_registry = ToolRegistry()
 
-def list_directory(path: str = ".") -> str:
+def ls(path: str = ".", ignore: List[str] = None, respect_git_ignore: bool = True) -> str:
     """
     列出指定目录下的文件和文件夹
     
     Args:
         path: 目录路径（相对路径），默认为当前目录
+        ignore: 要忽略的 Glob 模式列表
+        respect_git_ignore: 是否尊重 .gitignore 规则，默认为 true
         
     Returns:
         JSON字符串格式的文件列表
@@ -208,20 +211,48 @@ def list_directory(path: str = ".") -> str:
                 "timestamp": datetime.datetime.now().isoformat()
             })
         
+        # 准备过滤规则
+        patterns = []
+        if respect_git_ignore:
+            gitignore_path = os.path.join(current_dir, '.gitignore')
+            if os.path.exists(gitignore_path):
+                with open(gitignore_path, 'r', encoding='utf-8') as f:
+                    patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+        
+        if ignore:
+            patterns.extend([p.strip() for p in ignore if p.strip()])
+        
+        # 默认忽略 .git 目录
+        if not any(p.strip() == '.git/' or p.strip() == '.git' for p in patterns):
+            patterns.append('.git/')
+            
+        spec = pathspec.PathSpec.from_lines('gitwildmatch', patterns) if patterns else None
+        
         # 列出目录内容
         files = os.listdir(target_path)
         
         # 获取文件信息
         file_details = []
         for file in files:
-            file_path = os.path.join(target_path, file)
+            file_path_full = os.path.join(target_path, file)
+            rel_path = os.path.relpath(file_path_full, current_dir)
+            
+            # 处理目录的斜杠以匹配 pathspec
+            match_path = rel_path.replace(os.sep, '/')
+            if os.path.isdir(file_path_full) and not match_path.endswith('/'):
+                match_path += '/'
+            
+            # 过滤
+            if spec and spec.match_file(match_path):
+                continue
+                
             try:
-                stat = os.stat(file_path)
+                stat = os.stat(file_path_full)
                 file_details.append({
                     "name": file,
                     "size": stat.st_size,
                     "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    "is_dir": os.path.isdir(file_path),
+                    "is_dir": os.path.isdir(file_path_full),
                     "permissions": oct(stat.st_mode)[-3:] if hasattr(stat, 'st_mode') else "unknown"
                 })
             except Exception as e:
@@ -235,7 +266,7 @@ def list_directory(path: str = ".") -> str:
             "target_directory": target_path,
             "relative_path": path,
             "files": file_details,
-            "count": len(files),
+            "count": len(file_details),
             "timestamp": datetime.datetime.now().isoformat()
         }
         return json.dumps(result, ensure_ascii=False, indent=2)
@@ -393,12 +424,14 @@ def move_file(source: str, destination: str) -> str:
         })
 
 
-def read_file_content(filepath: str) -> str:
+def read_file(file_path: str, offset: int = 0, limit: Optional[int] = None) -> str:
     """
     读取指定文件的文本内容
     
     Args:
-        filepath: 文件路径（相对路径）
+        file_path: 文件路径（相对路径）
+        offset: 开始行号 (0-indexed)
+        limit: 读取的最大行数
         
     Returns:
         JSON字符串格式的文件内容
@@ -406,12 +439,12 @@ def read_file_content(filepath: str) -> str:
     try:
         # 安全验证：确保路径在当前工作目录内
         current_dir = os.path.abspath('.')
-        abs_filepath = os.path.abspath(os.path.join(current_dir, filepath))
+        abs_filepath = os.path.abspath(os.path.join(current_dir, file_path))
         
         # 检查路径是否在当前工作目录内
         if not abs_filepath.startswith(current_dir):
             return json.dumps({
-                "error": f"文件路径超出允许范围: {filepath}",
+                "error": f"文件路径超出允许范围: {file_path}",
                 "allowed_directory": current_dir,
                 "timestamp": datetime.datetime.now().isoformat()
             })
@@ -419,14 +452,14 @@ def read_file_content(filepath: str) -> str:
         # 检查文件是否存在
         if not os.path.exists(abs_filepath):
             return json.dumps({
-                "error": f"文件不存在: {filepath}",
+                "error": f"文件不存在: {file_path}",
                 "timestamp": datetime.datetime.now().isoformat()
             })
         
         # 检查是否为文件
         if not os.path.isfile(abs_filepath):
             return json.dumps({
-                "error": f"路径不是文件: {filepath}",
+                "error": f"路径不是文件: {file_path}",
                 "timestamp": datetime.datetime.now().isoformat()
             })
         
@@ -434,10 +467,10 @@ def read_file_content(filepath: str) -> str:
         file_size = os.path.getsize(abs_filepath)
         MAX_FILE_SIZE = 1024 * 1024  # 1MB限制
         
-        if file_size > MAX_FILE_SIZE:
+        if file_size > MAX_FILE_SIZE and offset == 0 and limit is None:
             return json.dumps({
-                "error": f"文件过大: {file_size}字节 > {MAX_FILE_SIZE}字节限制",
-                "filepath": filepath,
+                "error": f"文件过大: {file_size}字节 > {MAX_FILE_SIZE}字节限制。请使用 offset 和 limit 分块读取。",
+                "filepath": file_path,
                 "file_size": file_size,
                 "max_allowed": MAX_FILE_SIZE,
                 "timestamp": datetime.datetime.now().isoformat()
@@ -445,18 +478,29 @@ def read_file_content(filepath: str) -> str:
         
         # 读取文件内容
         with open(abs_filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
+            lines = f.readlines()
+        
+        total_lines = len(lines)
+        start = max(0, offset)
+        end = total_lines
+        if limit is not None:
+            end = min(total_lines, start + limit)
+        
+        content = "".join(lines[start:end])
         
         # 获取文件信息
         stat = os.stat(abs_filepath)
         
         result = {
-            "filepath": filepath,
+            "file_path": file_path,
             "absolute_path": abs_filepath,
             "content": content,
             "size": file_size,
             "encoding": "utf-8",
-            "lines": len(content.splitlines()),
+            "total_lines": total_lines,
+            "offset": start,
+            "limit": limit,
+            "read_lines": len(content.splitlines()),
             "modified": datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "timestamp": datetime.datetime.now().isoformat()
         }
@@ -464,24 +508,24 @@ def read_file_content(filepath: str) -> str:
         return json.dumps(result, ensure_ascii=False, indent=2)
     except UnicodeDecodeError:
         return json.dumps({
-            "error": f"文件不是UTF-8文本格式: {filepath}",
-            "filepath": filepath,
+            "error": f"文件不是UTF-8文本格式: {file_path}",
+            "filepath": file_path,
             "timestamp": datetime.datetime.now().isoformat()
         })
     except Exception as e:
         return json.dumps({
             "error": f"读取文件失败: {str(e)}",
-            "filepath": filepath,
+            "filepath": file_path,
             "timestamp": datetime.datetime.now().isoformat()
         })
 
 
-def write_file_content(filepath: str, content: str) -> str:
+def write_file(file_path: str, content: str) -> str:
     """
     写入或修改文件内容
     
     Args:
-        filepath: 文件路径（相对路径）
+        file_path: 文件路径（相对路径）
         content: 要写入的内容
         
     Returns:
@@ -490,12 +534,12 @@ def write_file_content(filepath: str, content: str) -> str:
     try:
         # 安全验证：确保路径在当前工作目录内
         current_dir = os.path.abspath('.')
-        abs_filepath = os.path.abspath(os.path.join(current_dir, filepath))
+        abs_filepath = os.path.abspath(os.path.join(current_dir, file_path))
         
         # 检查路径是否在当前工作目录内
         if not abs_filepath.startswith(current_dir):
             return json.dumps({
-                "error": f"文件路径超出允许范围: {filepath}",
+                "error": f"文件路径超出允许范围: {file_path}",
                 "allowed_directory": current_dir,
                 "timestamp": datetime.datetime.now().isoformat()
             })
@@ -503,17 +547,15 @@ def write_file_content(filepath: str, content: str) -> str:
         # 检查是否为目录（如果路径已存在）
         if os.path.exists(abs_filepath) and os.path.isdir(abs_filepath):
             return json.dumps({
-                "error": f"路径是目录，不是文件: {filepath}",
+                "error": f"路径是目录，不是文件: {file_path}",
                 "timestamp": datetime.datetime.now().isoformat()
             })
         
         # 检查父目录是否存在
         parent_dir = os.path.dirname(abs_filepath)
         if not os.path.exists(parent_dir):
-            return json.dumps({
-                "error": f"父目录不存在: {os.path.dirname(filepath)}",
-                "timestamp": datetime.datetime.now().isoformat()
-            })
+            # 自动创建父目录
+            os.makedirs(parent_dir, exist_ok=True)
         
         # 写入文件内容
         with open(abs_filepath, 'w', encoding='utf-8') as f:
@@ -527,7 +569,7 @@ def write_file_content(filepath: str, content: str) -> str:
         
         result = {
             "operation": "write",
-            "filepath": filepath,
+            "file_path": file_path,
             "absolute_path": abs_filepath,
             "content_length": len(content),
             "size_bytes": file_size,
@@ -540,9 +582,58 @@ def write_file_content(filepath: str, content: str) -> str:
     except Exception as e:
         return json.dumps({
             "error": f"写入文件失败: {str(e)}",
-            "filepath": filepath,
+            "filepath": file_path,
             "timestamp": datetime.datetime.now().isoformat()
         })
+
+def replace(file_path: str, old_string: str, new_string: str, allow_multiple: bool = False, instruction: str = None) -> str:
+    """
+    替换文件中的文本。默认要求 old_string 唯一，除非 allow_multiple 为 true。
+    
+    Args:
+        file_path: 文件路径 (相对路径)
+        old_string: 要查找并替换的精确字符串
+        new_string: 要替换为的新字符串
+        allow_multiple: 是否允许替换多个匹配项，默认为 false
+        instruction: 对此次修改的简要描述 (可选)
+        
+    Returns:
+        JSON字符串格式的操作结果
+    """
+    try:
+        # 安全验证
+        current_dir = os.path.abspath('.')
+        abs_path = os.path.abspath(os.path.join(current_dir, file_path))
+        
+        if not abs_path.startswith(current_dir):
+            return json.dumps({"error": f"访问越界: {file_path}"})
+            
+        if not os.path.exists(abs_path):
+            return json.dumps({"error": f"文件不存在: {file_path}"})
+            
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        count = content.count(old_string)
+        if count == 0:
+            return json.dumps({"error": f"未找到指定的 old_string", "file_path": file_path})
+        if count > 1 and not allow_multiple:
+            return json.dumps({"error": f"在文件中找到 {count} 处匹配，请提供更多上下文以确保唯一性，或设置 allow_multiple=True", "file_path": file_path})
+            
+        new_content = content.replace(old_string, new_string)
+        
+        with open(abs_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+            
+        return json.dumps({
+            "success": True,
+            "file_path": file_path,
+            "replacements": count,
+            "instruction": instruction,
+            "timestamp": datetime.datetime.now().isoformat()
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e), "file_path": file_path})
 
 def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
@@ -559,17 +650,18 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
 
 
 def get_time() -> str:
-    """获取当前日期和时间 (别名)"""
+    """获取当前日期 and 时间 (别名)"""
     return get_current_time()
 
 # 注册工具函数（在模块加载时自动执行）
-_tool_registry.register("ls", list_directory)
+_tool_registry.register("ls", ls)
 _tool_registry.register("get_current_time", get_current_time)
 _tool_registry.register("get_time", get_time)
 _tool_registry.register("ping", ping)
 _tool_registry.register("move_file", move_file)
-_tool_registry.register("read_file", read_file_content)
-_tool_registry.register("write_file", write_file_content)
+_tool_registry.register("read_file", read_file)
+_tool_registry.register("write_file", write_file)
+_tool_registry.register("replace", replace)
 
 
 def get_tool_registry() -> ToolRegistry:
@@ -622,7 +714,7 @@ def load_tools_config(config_path: str = "tools.yaml") -> Dict[str, Any]:
         # 返回默认配置
         return {
             "error": f"加载配置文件失败: {str(e)}",
-            "default_tools": ["list_directory", "get_current_time", "ping"]
+            "default_tools": ["ls", "get_current_time", "ping"]
         }
 
 if __name__ == "__main__":
@@ -633,8 +725,8 @@ if __name__ == "__main__":
     print("\n1. 测试工具注册表:")
     print(f"已注册工具: {_tool_registry.list_tools()}")
     
-    # 测试list_directory
-    print("\n2. 测试list_directory:")
+    # 测试ls
+    print("\n2. 测试ls:")
     result = execute_tool("ls", {})
     print(result[:200] + "..." if len(result) > 200 else result)
     

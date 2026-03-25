@@ -1,8 +1,0 @@
-> /provider
-ERROR: Command execution error: 'ChatCLI' object has no attribute 'isdigit'
-Traceback (most recent call last):
-  File "D:\3D\Projects\AI\code\taskchat\chat_cli_v2.py", line 210, in dispatch
-    self.commands[cmd_name]["func"](context, *args)
-  File "D:\3D\Projects\AI\code\taskchat\chat_cli_v2.py", line 294, in _cmd_provider
-    if provider_input.isdigit():
-AttributeError: 'ChatCLI' object has no attribute 'isdigit'
