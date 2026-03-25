@@ -17,7 +17,7 @@ from rich.text import Text
 
 from chat_logic_v2 import ChatLogicV2
 
-console = Console()
+console = Console(highlight=False, force_terminal=True)
 
 class CommandManager:
     def __init__(self):
@@ -90,10 +90,7 @@ class ChatCLI:
     def _register_commands(self):
         @self.cmd_manager.cmd("/help", help_text="Show this help message")
         def _help(cli, *args):
-            if not cli.json_mode:
-                console.print(cli.cmd_manager.get_help_text())
-            else:
-                cli.emit("sys", cli.cmd_manager.get_help_text())
+            cli.emit("sys", cli.cmd_manager.get_help_text())
 
         @self.cmd_manager.cmd("/exit", aliases=["/quit"], help_text="Exit the application")
         def _exit(cli, *args):
@@ -336,15 +333,24 @@ class ChatCLI:
         else:
             if msg_type == "error":
                 msg = content.get("message", content) if isinstance(content, dict) else content
-                console.print(f"[bold red]ERROR:[/bold red] {msg}")
+                t = Text()
+                t.append("ERROR: ", style="bold red")
+                t.append(msg)
+                console.print(t)
             elif msg_type == "sys":
-                console.print(f"[dim cyan]SYSTEM:[/dim cyan] {content}")
+                t = Text()
+                t.append("SYSTEM: ", style="dim cyan")
+                t.append(content, style="dim")
+                console.print(t)
             elif msg_type == "assistant":
-                console.print("\n[bold green]Assistant:[/bold green]")
-                console.print(content)
+                console.print(Text("\nAssistant:", style="bold green"))
+                console.print(Text(content, style="green"))
                 console.print()
             elif msg_type == "user":
-                console.print(f"\n[bold blue]You:[/bold blue] {content}\n")
+                t = Text()
+                t.append("You: ", style="bold blue")
+                t.append(content, style="blue")
+                console.print("\n", t, "\n")
             elif msg_type == "payload":
                 model = content.get("model", "unknown")
                 temp = content.get("temperature", "N/A")
