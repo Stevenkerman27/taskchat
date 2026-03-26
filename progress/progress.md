@@ -43,6 +43,7 @@
 ## 3. 环境陷阱与第三方 API 怪癖 (Environment & API Peculiarities)
 
 ### 3.1 大模型 API 适配
+*   **工具参数 Schema (JSON Schema) 的多态与 Strict 模式限制**：部分模型（如 DeepSeek）在使用 Strict 模式 (Structured Outputs, `strict: True`) 时，对 JSON Schema 有严格但自相矛盾的要求。一方面它要求所有 `properties` 都必须在 `required` 列表中（OpenAI 规范），另一方面如果尝试通过 `type: ["string", "null"]` 将某些参数变为可选时，它又会报错 400 `unknown variant array`（不支持 OpenAPI 3.1 数组类型声明）。因此，为了兼容这些模型的工具调用功能，必须在构造 tool 定义时**移除 `strict: True`**，并使用纯字符串形式定义 `type`（如 `type: "string"`），从而回退到标准的无结构化输出约束的函数调用模式。
 *   **Thinking/Reasoning 支持差异**：
     *   部分模型（如 Kimi）在启用思维链时对工具调用消息有特殊校验：如果包含工具调用，则必须显式包含 `reasoning_content`（哪怕为空串），否则会报 400 错误。
     *   逻辑层必须具备平滑处理不同模型对 `reasoning_content` 字段支持差异的能力。

@@ -223,7 +223,6 @@ class ChatLogicV2:
             "function": {
                 "name": tool_info.get('name', tool_name),
                 "description": tool_info.get('description', ''),
-                "strict": True,  # 启用strict模式
                 "parameters": tool_info.get('parameters', {})
             }
         }
@@ -831,6 +830,9 @@ class ChatLogicV2:
             
             # 清空当前上下文
             self.clear_context()
+            
+            # 清空因为 clear_context 自动添加的系统指令，因为将从存档中恢复
+            self.messages = []
             
             # 恢复消息
             for msg_dict in save_data["messages"]:

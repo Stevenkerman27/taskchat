@@ -12,10 +12,10 @@ tools:
       type: "object"
       properties:
         path:
-          type: ["string", "null"]
+          type: "string"
           description: "目录路径（相对路径），默认为当前目录"
         ignore:
-          type: ["array", "null"]
+          type: "array"
           items:
             type: "string"
           description: "要忽略的 Glob 模式列表"
@@ -59,7 +59,7 @@ tools:
           type: "integer"
           description: "开始行号 (0-indexed)"
         limit:
-          type: ["integer", "null"]
+          type: "integer"
           description: "读取的最大行数"
       required: ["file_path"]
       additionalProperties: false
@@ -104,7 +104,7 @@ tools:
           type: "boolean"
           description: "是否允许替换多个匹配项，默认为 false"
         instruction:
-          type: ["string", "null"]
+          type: "string"
           description: "对此次修改的简要描述 (可选)"
       required: ["file_path", "old_string", "new_string"]
       additionalProperties: false
@@ -167,7 +167,7 @@ tools:
           type: "string"
           description: "要执行的确切命令"
         description:
-          type: ["string", "null"]
+          type: "string"
           description: "对用户的简短描述 (可选)"
         dir_path:
           type: "string"

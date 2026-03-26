@@ -38,6 +38,6 @@
 
 18. 参考good_egs/shell.md添加shell功能(已完成)
 
-19. 修复读取聊天记录的bug. 读取contexts/shell_test0作为历史，选择basic工具组并且选择deepseek后对话会报错Error: OpenAI API调用失败: Error code: 400 - {'error': {'message': 'Invalid tool parameters schema : field `type`: unknown variant `array`, expected one of `string`, `number`, `integer`, `boolean`, `null`', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}。同时读取聊天记录后顶部会有重复的系统指令。编写一段可扩展的读取聊天记录测试脚本，并解决bug(未完成)
+19. 修复读取聊天记录的bug. 读取contexts/shell_test0作为历史，选择basic工具组并且选择deepseek后对话会报错Error: OpenAI API调用失败: Error code: 400 - {'error': {'message': 'Invalid tool parameters schema : field `type`: unknown variant `array`, expected one of `string`, `number`, `integer`, `boolean`, `null`', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}。同时读取聊天记录后顶部会有重复的系统指令。编写一段可扩展的读取聊天记录测试脚本，并解决bug(已完成)
 
 20. 参考good_egs/ask-user.md添加询问用户功能。为了简化代码选择的功能可以省略，要求用户输入1，2，3选项即可(未完成)
