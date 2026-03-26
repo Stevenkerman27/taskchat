@@ -156,6 +156,30 @@ tools:
     implementation: "system"
     category: "filesystem"
 
+  # Shell 工具
+  run_shell_command:
+    name: "run_shell_command"
+    description: "在当前系统的 shell 中执行给定的命令"
+    parameters:
+      type: "object"
+      properties:
+        command:
+          type: "string"
+          description: "要执行的确切命令"
+        description:
+          type: ["string", "null"]
+          description: "对用户的简短描述 (可选)"
+        dir_path:
+          type: "string"
+          description: "命令执行的工作目录，默认为当前目录"
+        is_background:
+          type: "boolean"
+          description: "是否作为后台进程运行"
+      required: ["command"]
+      additionalProperties: false
+    implementation: "system"
+    category: "basic"
+
   # 时间工具
   get_time:
     name: "get_time"
@@ -188,7 +212,7 @@ tool_groups:
   basic:
     name: "基础工具"
     description: "常用基础工具"
-    tools: ["ls", "get_time", "ping"]
+    tools: ["ls", "get_time", "ping", "run_shell_command"]
   
   filesystem:
     name: "文件系统工具"
@@ -227,3 +251,4 @@ implementations:
     replace: "tools_impl.replace"
     glob: "tools_impl.glob_tool"
     grep_search: "tools_impl.grep_search"
+    run_shell_command: "tools_impl.run_shell_command"

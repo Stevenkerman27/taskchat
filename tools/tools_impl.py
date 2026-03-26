@@ -788,6 +788,110 @@ def grep_search(pattern: str, path: str = ".", include: str = None) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+def run_shell_command(command: str, description: str = None, dir_path: str = ".", is_background: bool = False) -> str:
+    """
+    在当前系统的 shell 中执行给定的命令。
+    Windows 系统将使用 powershell.exe -NoProfile -Command 执行。
+    
+    Args:
+        command: 要执行的确切命令
+        description: 对用户的简短描述 (可选)
+        dir_path: 命令执行的工作目录，默认为当前目录
+        is_background: 是否作为后台进程运行
+        
+    Returns:
+        包含标准输出、标准错误和退出码等信息的 JSON 字符串
+    """
+    try:
+        current_dir = os.path.abspath('.')
+        exec_dir = os.path.abspath(os.path.join(current_dir, dir_path))
+        
+        if not exec_dir.startswith(current_dir):
+            return json.dumps({"error": f"执行目录越界: {dir_path}"})
+            
+        if not os.path.exists(exec_dir):
+            return json.dumps({"error": f"执行目录不存在: {dir_path}"})
+
+        env = os.environ.copy()
+        env['GEMINI_CLI'] = '1'
+
+        if os.name == 'nt':
+            cmd_wrapper = ["powershell.exe", "-NoProfile", "-Command", command]
+        else:
+            cmd_wrapper = ["bash", "-c", command]
+
+        if is_background:
+            if os.name == 'nt':
+                process = subprocess.Popen(
+                    cmd_wrapper, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE, 
+                    text=True, 
+                    cwd=exec_dir, 
+                    env=env,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else:
+                process = subprocess.Popen(
+                    cmd_wrapper, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE, 
+                    text=True, 
+                    cwd=exec_dir, 
+                    env=env,
+                    preexec_fn=os.setpgrp
+                )
+            return json.dumps({
+                "Command": command,
+                "Directory": exec_dir,
+                "Stdout": "(background process started)",
+                "Stderr": "",
+                "Background PIDs": [process.pid],
+                "timestamp": datetime.datetime.now().isoformat()
+            }, ensure_ascii=False)
+            
+        else:
+            result = subprocess.run(
+                cmd_wrapper, 
+                capture_output=True, 
+                text=True, 
+                timeout=120, 
+                cwd=exec_dir, 
+                env=env,
+                encoding='utf-8',
+                errors='replace'
+            )
+
+            stdout = result.stdout
+            if len(stdout) > 10000:
+                stdout = stdout[:2000] + "\n...[truncated]...\n" + stdout[-8000:]
+                
+            stderr = result.stderr
+            if len(stderr) > 10000:
+                stderr = stderr[:2000] + "\n...[truncated]...\n" + stderr[-8000:]
+                
+            return json.dumps({
+                "Command": command,
+                "Directory": exec_dir,
+                "Stdout": stdout,
+                "Stderr": stderr,
+                "Exit Code": result.returncode,
+                "timestamp": datetime.datetime.now().isoformat()
+            }, ensure_ascii=False)
+            
+    except subprocess.TimeoutExpired as e:
+        return json.dumps({
+            "Command": command,
+            "Error": f"Command timed out after {e.timeout}s",
+            "timestamp": datetime.datetime.now().isoformat()
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({
+            "Command": command,
+            "Error": str(e),
+            "timestamp": datetime.datetime.now().isoformat()
+        }, ensure_ascii=False)
+
 def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
     执行指定工具（重构版本，使用动态工具分发器）
@@ -817,6 +921,7 @@ _tool_registry.register("write_file", write_file)
 _tool_registry.register("replace", replace)
 _tool_registry.register("glob", glob_tool)
 _tool_registry.register("grep_search", grep_search)
+_tool_registry.register("run_shell_command", run_shell_command)
 
 
 def get_tool_registry() -> ToolRegistry:
