@@ -635,6 +635,159 @@ def replace(file_path: str, old_string: str, new_string: str, allow_multiple: bo
     except Exception as e:
         return json.dumps({"error": str(e), "file_path": file_path})
 
+def glob_tool(pattern: str, path: str = ".", case_sensitive: bool = False, respect_git_ignore: bool = True) -> str:
+    """
+    根据 glob 模式查找工作区中的文件。
+    """
+    try:
+        import pathlib
+        
+        current_dir = os.path.abspath('.')
+        search_dir = os.path.abspath(os.path.join(current_dir, path))
+        
+        if not search_dir.startswith(current_dir):
+            return json.dumps({"error": f"访问路径超出允许范围: {path}"})
+            
+        if not os.path.exists(search_dir):
+            return json.dumps({"error": f"搜索目录不存在: {path}"})
+
+        # 构建 gitignore 过滤
+        spec = None
+        if respect_git_ignore:
+            gitignore_path = os.path.join(current_dir, '.gitignore')
+            patterns = ['.git/']
+            if os.path.exists(gitignore_path):
+                with open(gitignore_path, 'r', encoding='utf-8') as f:
+                    patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+            import pathspec
+            spec = pathspec.PathSpec.from_lines('gitwildmatch', patterns)
+
+        base_path = pathlib.Path(search_dir)
+        matched_files = []
+        
+        try:
+            paths = list(base_path.glob(pattern))
+        except Exception as e:
+            return json.dumps({"error": f"Glob matching error: {str(e)}"})
+
+        for p in paths:
+            if not p.is_file():
+                continue
+                
+            try:
+                rel_to_current = os.path.relpath(p, current_dir).replace('\\', '/')
+            except ValueError:
+                continue
+                
+            if spec and spec.match_file(rel_to_current):
+                continue
+                
+            matched_files.append(p)
+
+        # 按修改时间排序，最新的在前
+        matched_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        if not matched_files:
+            return f'Found 0 file(s) matching "{pattern}" within {path}'
+            
+        file_list_str = "\n".join(os.path.relpath(p, current_dir).replace('\\', '/') for p in matched_files)
+        return f'Found {len(matched_files)} file(s) matching "{pattern}" within {path}, sorted by modification time (newest first):\n{file_list_str}'
+        
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+def grep_search(pattern: str, path: str = ".", include: str = None) -> str:
+    """
+    在指定目录的文件中搜索正则表达式模式。
+    """
+    try:
+        import re
+        import pathlib
+        
+        current_dir = os.path.abspath('.')
+        search_dir = os.path.abspath(os.path.join(current_dir, path))
+        
+        if not search_dir.startswith(current_dir):
+            return json.dumps({"error": f"访问路径超出允许范围: {path}"})
+            
+        if not os.path.exists(search_dir):
+            return json.dumps({"error": f"搜索目录不存在: {path}"})
+
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            return json.dumps({"error": f"无效的正则表达式: {pattern}, 错误: {str(e)}"})
+
+        # 构建 gitignore 过滤
+        gitignore_path = os.path.join(current_dir, '.gitignore')
+        ignore_patterns = ['.git/', 'node_modules/', '__pycache__/', '*.pyc']
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, 'r', encoding='utf-8') as f:
+                ignore_patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+        import pathspec
+        spec = pathspec.PathSpec.from_lines('gitwildmatch', ignore_patterns)
+
+        base_path = pathlib.Path(search_dir)
+        
+        # 收集文件
+        files_to_search = []
+        if include:
+            paths_iter = base_path.glob(include) if '/' in include else base_path.rglob(include)
+        else:
+            paths_iter = base_path.rglob('*')
+            
+        for p in paths_iter:
+            if not p.is_file():
+                continue
+            
+            try:
+                rel_to_current = os.path.relpath(p, current_dir).replace('\\', '/')
+            except ValueError:
+                continue
+                
+            if spec.match_file(rel_to_current):
+                continue
+                
+            files_to_search.append(p)
+
+        matches = {}
+        total_matches = 0
+        
+        for p in files_to_search:
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    for i, line in enumerate(f, 1):
+                        if regex.search(line):
+                            rel_path = os.path.relpath(p, current_dir).replace('\\', '/')
+                            if rel_path not in matches:
+                                matches[rel_path] = []
+                            matches[rel_path].append((i, line.rstrip('\n\r')))
+                            total_matches += 1
+            except UnicodeDecodeError:
+                continue # 忽略二进制或非 UTF-8 文件
+            except Exception:
+                continue
+
+        filter_str = f' (filter: "{include}")' if include else ''
+        if total_matches == 0:
+            return f'Found 0 matches for pattern "{pattern}" in path "{path}"{filter_str}'
+            
+        # 格式化输出
+        output = []
+        output.append(f'Found {total_matches} matches for pattern "{pattern}" in path "{path}"{filter_str}:')
+        
+        for file_path, lines in matches.items():
+            output.append('---')
+            output.append(f'File: {file_path}')
+            for line_num, line_content in lines:
+                output.append(f'L{line_num}: {line_content}')
+        output.append('---')
+        
+        return '\n'.join(output)
+        
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
 def execute_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
     """
     执行指定工具（重构版本，使用动态工具分发器）
@@ -662,6 +815,8 @@ _tool_registry.register("move_file", move_file)
 _tool_registry.register("read_file", read_file)
 _tool_registry.register("write_file", write_file)
 _tool_registry.register("replace", replace)
+_tool_registry.register("glob", glob_tool)
+_tool_registry.register("grep_search", grep_search)
 
 
 def get_tool_registry() -> ToolRegistry:

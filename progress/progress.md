@@ -33,6 +33,10 @@
 *   **Socket 锁保护**：在多线程环境（如 Socket 监听与消息广播并行）下，必须使用 `threading.Lock()` 保护共享资源（如 `self.clients` 列表）。
 *   **广播策略**：采用“先收集异常客户端，后统一清理”的策略，避免在迭代列表时进行删除操作导致程序崩溃。
 
+### 2.4 跨平台鲁棒性优先
+*   **纯 Python 实现**：对于文件系统与搜索工具（如 `glob`, `grep_search`），必须优先使用 Python 内置模块（如 `pathlib`, `re`）进行纯代码实现，避免依赖外部系统级命令（如 `git grep` 或系统 `grep`）。这确保了在不同操作系统（特别是 Windows）和无特定环境变量的机器上不会出现不可预期的异常。
+*   **结构化输出与降噪**：工具输出结果应格式化为易于大模型阅读的纯文本格式（包含文件路径和对应行号），摒弃冗长的 JSON 数组输出。此外，必须复用 `pathspec` 库强行拦截所有在 `.gitignore` 中的文件（如 `node_modules/`, `__pycache__/`），最大限度减少上下文噪音和 Token 消耗。
+
 ---
 
 ## 3. 环境陷阱与第三方 API 怪癖 (Environment & API Peculiarities)
@@ -52,7 +56,7 @@
 ## 4. 短期路线图与技术债 (Short-term Roadmap & Tech Debt)
 
 ### 4.1 待办核心功能 (Backlog)
-*   **工具系统扩展**: 实现鲁棒的文件系统工具 (`ls`, `read_file`, `write_file`, `replace`)，支持 `.gitignore` 过滤。(已完成)
+*   **工具系统扩展**: 实现鲁棒的文件系统工具 (`ls`, `read_file`, `write_file`, `replace`, `glob`, `grep_search`)，支持 `.gitignore` 过滤。(已完成)
 
 ### 4.2 技术债清理
 *   **Pydantic 迁移**: 逐步将所有消息模型完全迁移至 Pydantic，利用其内置的验证与反序列化机制替代手动字典转换。

@@ -34,4 +34,4 @@
 
 16. 添加工具。参考file-system.md/good_egs，实现或扩展ls, read_file,write_file, replace工具。注意ls默认忽略.gitignore文件, read_file只支持文本文件(已完成)
 
-17. 参考good_egs/file-system.md添加grep和glob. gemini的实现grep.ts和glob.ts在good_egs文件夹中可供参考(未实现)
+17. 严格参考good_egs/file-system.md添加grep和glob. gemini的实现grep.ts和glob.ts在good_egs文件夹中可供参考(已完成)

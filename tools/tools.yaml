@@ -111,6 +111,51 @@ tools:
     implementation: "system"
     category: "filesystem"
 
+  # 文件查找工具
+  glob:
+    name: "glob"
+    description: "根据 glob 模式查找工作区中的文件"
+    parameters:
+      type: "object"
+      properties:
+        pattern:
+          type: "string"
+          description: "要匹配的 glob 模式（如 '*.py', 'src/**/*.js'）"
+        path:
+          type: "string"
+          description: "要搜索的绝对或相对目录路径，默认当前目录"
+        case_sensitive:
+          type: "boolean"
+          description: "是否区分大小写，默认 false"
+        respect_git_ignore:
+          type: "boolean"
+          description: "是否遵守 .gitignore 规则，默认 true"
+      required: ["pattern"]
+      additionalProperties: false
+    implementation: "system"
+    category: "filesystem"
+
+  # 文本搜索工具
+  grep_search:
+    name: "grep_search"
+    description: "在指定目录的文件中搜索正则表达式模式，并返回匹配的行、文件路径和行号。"
+    parameters:
+      type: "object"
+      properties:
+        pattern:
+          type: "string"
+          description: "要搜索的正则表达式"
+        path:
+          type: "string"
+          description: "要搜索的绝对或相对目录路径，默认当前目录"
+        include:
+          type: "string"
+          description: "用于过滤要搜索的文件的 glob 模式（如 '*.js', 'src/**/*.{ts,tsx}'）"
+      required: ["pattern"]
+      additionalProperties: false
+    implementation: "system"
+    category: "filesystem"
+
   # 时间工具
   get_time:
     name: "get_time"
@@ -148,7 +193,7 @@ tool_groups:
   filesystem:
     name: "文件系统工具"
     description: "文件操作相关工具"
-    tools: ["ls", "move_file", "read_file", "write_file", "replace"]
+    tools: ["ls", "move_file", "read_file", "write_file", "replace", "glob", "grep_search"]
 
 # 默认工具配置
 defaults:
@@ -180,3 +225,5 @@ implementations:
     read_file: "tools_impl.read_file"
     write_file: "tools_impl.write_file"
     replace: "tools_impl.replace"
+    glob: "tools_impl.glob_tool"
+    grep_search: "tools_impl.grep_search"
