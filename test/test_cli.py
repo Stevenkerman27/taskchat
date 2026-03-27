@@ -5,6 +5,7 @@ import time
 import os
 import threading
 from queue import Queue, Empty
+import glob as py_glob
 
 class NonBlockingStreamReader:
     def __init__(self, stream):
@@ -28,144 +29,167 @@ class NonBlockingStreamReader:
         except Empty:
             return None
 
-def test_cli():
-    print("=== 开始测试 CLI 功能 (异步观察模式) ===")
-    
-    test_file = "test/test_write.txt"
-    with open(test_file, "w", encoding="utf-8") as f:
-        f.write("你好世界")
-    
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    process = subprocess.Popen(
-        [sys.executable, "chat_cli_v2.py", "--json"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        env=env,
-        bufsize=1
-    )
+class CLITestBot:
+    def __init__(self):
+        print("=== 初始化 CLI 测试机器人 ===")
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        self.process = subprocess.Popen(
+            [sys.executable, "chat_cli_v2.py", "--json"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            bufsize=1
+        )
+        self.stdout_reader = NonBlockingStreamReader(self.process.stdout)
+        self.last_msg_time = time.time()
 
-    stdout_reader = NonBlockingStreamReader(process.stdout)
-
-    def send_cmd(cmd_dict):
+    def send_cmd(self, cmd_dict):
         cmd_str = json.dumps(cmd_dict, ensure_ascii=False) + "\n"
-        process.stdin.write(cmd_str)
-        process.stdin.flush()
+        self.process.stdin.write(cmd_str)
+        self.process.stdin.flush()
 
-    def get_json_msg(timeout=1):
-        line = stdout_reader.readline(timeout=timeout)
+    def get_json_msg(self, timeout=1):
+        line = self.stdout_reader.readline(timeout=timeout)
         if not line: return None
         try:
-            return json.loads(line)
+            msg = json.loads(line)
+            self.last_msg_time = time.time()
+            return msg
         except json.JSONDecodeError:
             if line.strip(): print(f"[STDOUT] {line.strip()}")
             return None
 
-    def wait_for_sys(part, timeout=10):
+    def wait_for_sys(self, part, timeout=10):
         start = time.time()
         while time.time() - start < timeout:
-            msg = get_json_msg(timeout=1)
+            msg = self.get_json_msg(timeout=1)
             if msg and msg.get('type') == 'sys':
                 print(f"[SYS] {msg.get('content')}")
                 if part in msg.get('content', ''): return True
         return False
 
-    # --- 初始化 ---
-    print("\n[TEST] 基础配置中...")
-    send_cmd({"cmd": "raw", "args": {"text": "/clear"}})
-    wait_for_sys("Context cleared", timeout=5)
-    send_cmd({"cmd": "raw", "args": {"text": "/provider Silicon_flow"}})
-    wait_for_sys("Switched to Silicon_flow")
-    send_cmd({"cmd": "raw", "args": {"text": "/tools basic,filesystem"}})
-    wait_for_sys("Active tools")
-    send_cmd({"cmd": "raw", "args": {"text": "/option 1 1"}})
-    wait_for_sys("Set option temperature = 1")
-
-    # --- 开始对话 ---
-    prompt = "请读取当前时间，然后阅读 test/test_write.txt 的内容并告诉我。把该文件内容修改为 '测试成功' 并附带你刚才读到的时间。修改完后请再次读取文件确认。"
-    print(f"\n[USER] {prompt}")
-    send_cmd({"cmd": "chat", "args": {"msg": prompt}})
-
-    last_activity_time = time.time()
-    wait_for_terminal = False # 是否进入收尾静默期等待
-    send_results_count = 0 # 防止死循环
-    
-    while True:
-        msg = get_json_msg(timeout=0.1)
+    def chat_and_wait(self, prompt, timeout=120):
+        print(f"\n[USER] {prompt}")
+        self.send_cmd({"cmd": "chat", "args": {"msg": prompt}})
         
-        if msg:
-            last_activity_time = time.time()
+        start_time = time.time()
+        assistant_done = False
+        
+        while time.time() - start_time < timeout:
+            msg = self.get_json_msg(timeout=0.5)
+            if not msg:
+                # 如果 AI 已经发过话了，且队列空了，说明可能结束了
+                if assistant_done:
+                    time.sleep(2) # 留点余地
+                    if self.stdout_reader._q.empty():
+                        return True
+                continue
+            
             m_type = msg.get("type")
             content = msg.get("content")
-
-            if m_type == "state": continue
             
-            if m_type == "payload":
-                print(f"[RECV] payload: model={content.get('model')}")
+            if m_type == "state": continue
+            if m_type == "payload": continue
+            
+            if m_type == "assistant":
+                print(f"[ASSISTANT] {content}")
+                assistant_done = True
+                if "Error" in str(content) or "失败" in str(content):
+                    print("-> 检测到可能的消息错误")
             
             elif m_type == "tool_calls":
-                calls = content if isinstance(content, list) else []
-                print(f"[RECV] tool_calls: {len(calls)} items")
-                
-                to_execute = [tc for tc in calls if not tc.get("executed")]
-                if to_execute:
-                    print(f"-> 执行工具: {[tc.get('function_name') for tc in to_execute]}")
-                    send_cmd({"cmd": "execute"})
-                    wait_for_terminal = False # 重置静默期
-                    send_results_count = 0 # 重置计数器
-                else:
-                    if send_results_count < 3:
-                        # 所有工具都已执行，但模型还没收到结果
-                        print("-> 工具列表已全部执行，手动同步结果...")
-                        send_cmd({"cmd": "send_results"})
-                        wait_for_terminal = False
-                        send_results_count += 1
-                    else:
-                        print("-> [TEST] 多次发送结果失败，判定为死循环，强制退出。")
-                        break
+                print(f"[RECV] tool_calls: {content}")
+                self.send_cmd({"cmd": "execute"})
+                assistant_done = False # 重置，等待工具结果后的回答
             
             elif m_type == "tool_result":
-                print(f"[RECV] tool_result received. 即将发送结果回 Agent...")
-                send_cmd({"cmd": "send_results"})
-                wait_for_terminal = False
-                send_results_count = 1
-            
-            elif m_type == "assistant":
-                print(f"\n[ASSISTANT] {content}")
-                wait_for_terminal = True # AI 发话了，可能进入收尾阶段，开始倒计时
-                if "发送工具结果失败" in content or "API调用失败" in content:
-                    print(f"-> [TEST] 检测到 API 错误，可能导致死循环，不再继续重试。")
+                print(f"[RECV] tool_result received.")
+                self.send_cmd({"cmd": "send_results"})
             
             elif m_type == "error":
-                print(f"!!! 错误: {content}")
-                break
+                print(f"!!! Error: {content}")
+                return False
+                    
+        print(f"Timeout ({timeout}s) waiting for response.")
+        return assistant_done
 
-        # 检查是否退出
-        elapsed_since_last = time.time() - last_activity_time
-        if wait_for_terminal and elapsed_since_last > 30:
-            print(f"\n[TEST] 判定流程结束。")
-            break
+    def stop(self):
+        print("\n=== 停止测试机器人 ===")
+        self.send_cmd({"cmd": "exit"})
+        self.process.terminate()
+
+def run_test():
+    bot = CLITestBot()
+    try:
+        # --- 准备工作 ---
+        print("\n[TEST] 0. 初始化配置")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/new"}})
+        bot.wait_for_sys("New session started")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/provider Silicon_flow"}})
+        bot.wait_for_sys("Switched to Silicon_flow")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/tools filesystem"}})
+        bot.wait_for_sys("Active tools")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/option temperature 0.8"}})
+        bot.wait_for_sys("Set option temperature = 0.8")
+
+        # --- Phase 1: 文件操作 ---
+        print("\n[TEST] 1. 基础文件操作 (write/read/replace)")
+        prompt1 = "请创建一个文件 test/phase1.txt，内容为 'Initial Content'。然后将其中的 'Initial' 替换为 'Updated'。最后读取该文件内容告知我。"
+        if not bot.chat_and_wait(prompt1):
+            print("Phase 1 failed")
+
+        # --- Phase 2: Session 保存与加载 ---
+        print("\n[TEST] 2. Session 持久化")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/save test_session_auto"}})
+        bot.wait_for_sys("Chat saved")
         
-        # 兜底超时
-        if elapsed_since_last > 60:
-            print("\n[TEST] 超过 60 秒无任何交互响应，强制退出。")
-            break
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/new"}})
+        bot.wait_for_sys("New session started")
+        
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/load test_session_auto.json"}})
+        bot.wait_for_sys("Chat loaded")
 
-        time.sleep(0.01)
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/tools basic,filesystem"}})
+        bot.wait_for_sys("Active tools")
+        
+        prompt2 = "我们刚才在 test/phase1.txt 中写入了什么内容？请根据历史记录告诉我。"
+        if not bot.chat_and_wait(prompt2):
+            print("Phase 2 failed")
 
-    # --- 退出 ---
-    send_cmd({"cmd": "exit"})
-    process.terminate()
-    
-    print("\n=== 最终文件检查 (请观察下方输出确认逻辑正确性) ===")
-    if os.path.exists(test_file):
-        with open(test_file, "r", encoding="utf-8") as f:
-            print(f"文件内容: {f.read()}")
+        # --- Phase 3: Glob & Grep ---
+        print("\n[TEST] 3. Glob & Grep 测试")
+        prompt3 = "请使用 glob 工具搜索.py文件。接着使用 grep_search 工具在 test/test_grep.txt 中搜索 'hapmemory'。"
+        if not bot.chat_and_wait(prompt3):
+            print("Phase 3 failed")
 
-    print("=== 测试脚本运行结束 ===")
+        # --- Phase 4: Shell 测试 ---
+        print("\n[TEST] 4. Shell 工具测试 (切换工具组)")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/tools basic"}})
+        bot.wait_for_sys("Active tools")
+        
+        prompt4 = "请使用 run_shell_command 工具在 shell 中打印 'hello world'。"
+        if not bot.chat_and_wait(prompt4):
+            print("Phase 4 failed")
+
+        # --- Phase 5: Deepseek & Git ---
+        print("\n[TEST] 5. Deepseek Provider & Git Status")
+        bot.send_cmd({"cmd": "raw", "args": {"text": "/provider deepseek deepseek-chat"}})
+        bot.wait_for_sys("Switched to deepseek")
+        
+        prompt5 = "请使用 ls 工具列出当前目录。然后使用 run_shell_command 工具执行 'git status'。"
+        if not bot.chat_and_wait(prompt5):
+            print("Phase 5 failed")
+
+        print("\n=== 所有测试步骤已发送完毕 ===")
+
+    except Exception as e:
+        print(f"测试执行异常: {e}")
+    finally:
+        bot.stop()
 
 if __name__ == "__main__":
-    test_cli()
+    run_test()

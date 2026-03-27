@@ -261,6 +261,10 @@ class ChatLogicV2:
     
     def add_message(self, role: str, content: str, **kwargs):
         """添加消息到上下文"""
+        # 如果是用户消息，记录当前启用的工具列表，用于调试
+        if role == "user" and "enabled_tools" not in kwargs:
+            kwargs["enabled_tools"] = self.get_enabled_tools()
+            
         message = create_text_message(role, content, **kwargs)
         self.messages.append(message)
         self._save_state()
@@ -298,12 +302,18 @@ class ChatLogicV2:
         """
         self._load_state()
         
-        # 创建临时消息列表，过滤掉不需要的思维链内容
+        # 创建临时消息列表，过滤掉不需要的思维链内容和调试用的工具列表
         temp_messages = []
         for msg in self.messages:
             new_metadata = msg.metadata.copy() if msg.metadata else {}
+            # 过滤不需要的思维链
             if "reasoning_content" in new_metadata and not new_metadata.get("tool_calls"):
                 del new_metadata["reasoning_content"]
+            
+            # 显式过滤掉仅用于本地调试的 enabled_tools，防止泄露到 API
+            if "enabled_tools" in new_metadata:
+                del new_metadata["enabled_tools"]
+                
             new_msg = InternalMessage(
                 role=msg.role,
                 content=msg.content,
