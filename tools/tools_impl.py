@@ -859,7 +859,8 @@ def run_shell_command(command: str, description: str = None, dir_path: str = "."
                 cwd=exec_dir, 
                 env=env,
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                stdin=subprocess.DEVNULL
             )
 
             stdout = result.stdout

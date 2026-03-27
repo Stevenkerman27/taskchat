@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from message_models import InternalMessage, ChatOptions, ProviderConfig, create_text_message, convert_simple_messages
 from providers import get_provider_strategy, list_providers
 import json
+import sys
 
 
 class ChatLogicV2:
@@ -417,11 +418,12 @@ class ChatLogicV2:
                 if not tool_call["executed"]:
                     function_name = tool_call["function_name"]
                     arguments = tool_call["arguments"]
-                    
+                    print(f"[DEBUG LOGIC] starting {function_name}", file=sys.stderr, flush=True)
+
                     try:
                         # 执行工具
                         tool_result = execute_tool(function_name, arguments)
-                        
+                        print(f"[DEBUG LOGIC] finished {function_name}", file=sys.stderr, flush=True)                        
                         # 更新工具调用状态
                         tool_call["executed"] = True
                         tool_call["result"] = tool_result

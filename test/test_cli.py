@@ -38,7 +38,7 @@ class CLITestBot:
             [sys.executable, "chat_cli_v2.py", "--json"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             env=env,
@@ -94,6 +94,10 @@ class CLITestBot:
             
             if m_type == "state": continue
             if m_type == "payload": continue
+            
+            if m_type == "sys":
+                print(f"[SYS] {content}")
+                continue
             
             if m_type == "assistant":
                 print(f"[ASSISTANT] {content}")

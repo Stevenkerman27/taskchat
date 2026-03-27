@@ -43,3 +43,5 @@
 20. 修改context保存方法,保存每次对话中用户选择的允许调用的工具名列表以方便debug，仅在用户发送消息时记录(已完成)
 
 21. 完善test_cli.py，写成一个完整的cli测试脚本测试每一个工具的调用。如在现在的测试项目之后添加以下内容：开启新对话并读取刚刚保存的文件读写context，进行glob(如搜索Microsoft YaHei)和grep(使用test/test_grep.txt)测试，随后选择basic工具组测试shell中打印hello world，随后切换到deepseek chat测试ls和git status功能。每一项测试均明确告诉AI调用哪一个工具。测试脚本不进行评判，仅包含超时退出逻辑以防止测试脚本永远卡死，在测试完成后独立读取context文件进行分析(已完成)
+
+22. test_cli.py反映phase5测试失败，实际测试发现可能是shell 执行有bug。分析并修复(已完成)

@@ -36,9 +36,12 @@
 ### 2.4 工具规范
 *   **纯 Python 实现**：对于文件系统与搜索工具（如 `glob`, `grep_search`），必须优先使用 Python 内置模块（如 `pathlib`, `re`）进行纯代码实现，避免依赖外部系统级命令（如 `git grep` 或系统 `grep`）。这确保了在不同操作系统（特别是 Windows）和无特定环境变量的机器上不会出现不可预期的异常。
 *   **结构化输出与降噪**：工具输出结果应格式化为易于大模型阅读的纯文本格式（包含文件路径和对应行号），摒弃冗长的 JSON 数组输出。此外，必须复用 `pathspec` 库强行拦截所有在 `.gitignore` 中的文件（如 `node_modules/`, `__pycache__/`），最大限度减少上下文噪音和 Token 消耗。
-*   **Shell 执行防线**：对于非交互式的 shell 命令（如 `run_shell_command`），强制设定 `timeout`（如 120 秒）以防止进程因等待输入（如 Windows `set /p`）而导致整个代理系统挂起；此外，对超长的终端日志输出（如构建输出）必须执行掐头去尾截断以防撑爆 Token 上限。在 Windows 环境下必须封装为 `powershell.exe -NoProfile -Command` 执行以兼容复杂命令与管道。
+*   **Shell 执行防线**：对于非交互式的 shell 命令（如 `run_shell_command`），强制设定 `timeout`（如 120 秒）以防止进程因等待输入（如 Windows `set /p`）而导致整个代理系统挂起；此外，对超长的终端日志输出（如构建输出）必须执行掐头去尾截断以防撑爆 Token 上限。在 Windows 环境下必须封装为 `powershell.exe -NoProfile -Command` 执行以兼容复杂命令与管道。必须在 `subprocess.run` 和 `subprocess.Popen` 调用中显式传入 `stdin=subprocess.DEVNULL`，以防止如 `git status` 等命令在继承父进程管道时意外阻塞等待输入，从而引发死锁。
 
-### 2.5 调试元数据记录 (Debug Metadata)
+### 2.5 测试与自动化死循环防御
+*   **状态推进强保证**: 在执行自动化的工具调用循环时，即使在工具执行层面或模块加载时发生未捕获异常（如 `SyntaxError` ），状态管理器也必须确保该工具调用的 `executed` 状态或整体 `tool_call_mode` 被正确推进或标记为失败，而非直接中断跳过状态更新。否则，未完成状态将被重新发送给大模型，导致大模型不断重复发起相同的工具调用，从而引发自动化测试脚本或自动执行循环中的无限重试死循环。
+
+### 2.6 调试元数据记录 (Debug Metadata)
 *   **启用工具记录**: 在 `add_message` 中，如果角色为 `user`，会自动在 `metadata` 中记录当前启用的工具列表 (`enabled_tools`)，以便在分析 JSON 会话记录时定位工具调用异常。
 *   **Payload 过滤**: 在 `get_full_payload` 中，必须显式过滤掉 `enabled_tools` 等仅限本地调试的元数据，确保不会将其发送给大模型 API 造成潜在的 400 错误或上下文污染。
 

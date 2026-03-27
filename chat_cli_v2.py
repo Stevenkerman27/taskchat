@@ -536,7 +536,9 @@ class ChatCLI:
         self.emit_state()
 
     def do_execute(self):
+        self.emit_sys("DEBUG: starting execute_pending_tools")
         results = self.logic.execute_pending_tools()
+        self.emit_sys("DEBUG: finished execute_pending_tools")
         self.emit("tool_result", results)
         self.emit_state()
 
